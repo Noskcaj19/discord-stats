@@ -1,0 +1,20 @@
+[package]
+name = "discord-statistics"
+version = "0.1.0"
+authors = ["Noskcaj <kcajdev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rusqlite = "0.17.0"
+
+[dependencies.serenity]
+git = "https://github.com/terminal-discord/serenity"
+branch = "current"
+default_features = false
+features = [
+    "cache",
+    "client",
+    "gateway",
+    "model",
+    "http",
+]
