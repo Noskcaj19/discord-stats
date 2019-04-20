@@ -27,8 +27,9 @@ impl EventHandler for Handler {
         }
     }
 
-    fn ready(&self, _ctx: Context, ready: Ready) {
+    fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
-        *self.user.lock().borrow_mut() = Some(ready.user.into())
+        *self.user.lock().borrow_mut() = Some(ready.user.into());
+        ctx.set_presence(None, serenity::model::user::OnlineStatus::Offline);
     }
 }
