@@ -1,6 +1,5 @@
 use serenity::{model::prelude::*, prelude::*};
 use std::cell::RefCell;
-use std::sync::Arc;
 
 use crate::store::StatsStore;
 
@@ -19,7 +18,7 @@ impl Handler {
 }
 
 impl EventHandler for Handler {
-    fn message(&self, ctx: Context, m: Message) {
+    fn message(&self, _ctx: Context, m: Message) {
         if let Some(ref user) = *self.user.lock().borrow() {
             if user == &m.author {
                 self.store.insert_msg(&m)

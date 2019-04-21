@@ -21,17 +21,17 @@ impl StatsStore {
     }
 
     pub fn insert_msg(&self, msg: &Message) {
-        self.conn.lock().execute(
-            INSERT_MSG_SQL,
-            &[
-                &msg.id.to_string() as &ToSql,
-                &msg.timestamp.to_rfc3339(),
-                &msg.content.len().to_string(),
-                &msg.channel_id.to_string(),
-                &msg.guild_id.map(|x| x.to_string()),
-                &msg.author.id.to_string(),
-            ],
-        );
+        let data = &[
+            &msg.id.to_string() as &ToSql,
+            &msg.timestamp.to_rfc3339(),
+            &msg.content.len().to_string(),
+            &msg.channel_id.to_string(),
+            &msg.guild_id.map(|x| x.to_string()),
+            &msg.author.id.to_string(),
+        ];
+        if let Err(e) = self.conn.lock().execute(INSERT_MSG_SQL, data) {
+            eprintln!("Failed to insert message: {}", e);
+        }
     }
 }
 
