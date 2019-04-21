@@ -1,15 +1,16 @@
 use serenity::{model::prelude::*, prelude::*};
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::store::StatsStore;
 
 pub struct Handler {
-    store: StatsStore,
+    store: Arc<StatsStore>,
     user: Mutex<RefCell<Option<User>>>,
 }
 
 impl Handler {
-    pub fn with_store(store: StatsStore) -> Handler {
+    pub fn with_store(store: Arc<StatsStore>) -> Handler {
         Handler {
             store,
             user: Mutex::new(RefCell::new(None)),
