@@ -7,7 +7,7 @@ pub struct StatsStore {
     conn: Arc<Mutex<SqliteConnection>>,
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(serde_derive::Serialize, Debug)]
 pub struct Channel {
     pub channel_id: String,
     pub guild_id: Option<String>,
