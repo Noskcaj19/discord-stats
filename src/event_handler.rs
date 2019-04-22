@@ -27,6 +27,16 @@ impl EventHandler for Handler {
         }
     }
 
+    fn message_update(&self, _ctx: Context, update: MessageUpdateEvent) {
+        if let Some(ref user) = *self.user.lock().borrow() {
+            if let Some(ref author) = update.author {
+                if user == author {
+                    self.store.insert_edit(&update)
+                }
+            }
+        }
+    }
+
     fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
         *self.user.lock().borrow_mut() = Some(ready.user.into());
