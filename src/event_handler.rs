@@ -27,7 +27,13 @@ impl EventHandler for Handler {
         }
     }
 
-    fn message_update(&self, _ctx: Context, update: MessageUpdateEvent) {
+    fn message_update(
+        &self,
+        _ctx: Context,
+        _old: Option<Message>,
+        _new: Option<Message>,
+        update: MessageUpdateEvent,
+    ) {
         if let Some(ref user) = *self.user.lock().borrow() {
             if let Some(ref author) = update.author {
                 if user == author {

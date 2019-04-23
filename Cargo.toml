@@ -15,12 +15,11 @@ persistent = "0.4.0"
 
 [dependencies.serenity]
 git = "https://github.com/terminal-discord/serenity"
-branch = "current"
+branch = "v0.6.x"
 default_features = false
 features = [
     "cache",
     "client",
     "gateway",
     "model",
-    "http",
 ]
