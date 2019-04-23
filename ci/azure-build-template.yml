@@ -1,0 +1,62 @@
+jobs:
+  - job: ${{ parameters.name }}
+    pool:
+      vmImage: ${{ parameters.vmImage }}
+    steps:
+      - ${{ if eq(parameters.name, 'Linux') }}:
+          # Install openssl on Linux
+          - script: |
+              sudo apt-get install openssl
+            displayName: Install OpenSSL
+      - ${{ if ne(parameters.name, 'Windows') }}:
+          # Linux and macOS.
+          - script: |
+              curl https://sh.rustup.rs -sSf | sh -s -- -y
+              echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+            displayName: Install rust
+      - ${{ if eq(parameters.name, 'Windows') }}:
+          # Windows.
+          - script: |
+              curl -sSf -o rustup-init.exe https://win.rustup.rs
+              rustup-init.exe -y
+              set PATH=%PATH%;%USERPROFILE%\.cargo\bin
+              echo "##vso[task.setvariable variable=PATH;]%PATH%;%USERPROFILE%\.cargo\bin"
+            displayName: Install rust (windows)
+
+      # All platforms.
+      - script: |
+          rustc -Vv
+          cargo -V
+        displayName: Query rust and cargo versions
+
+      - ${{ if ne(parameters.name, 'MacOS') }}:
+          # Windows and Linux.
+          - script: cargo build --release --features "rusqlite/bundled"
+            displayName: Build
+      - ${{ if eq(parameters.name, 'MacOS') }}:
+          # macOS.
+          - script: cargo build --release
+            displayName: Build
+
+      - ${{ if eq(parameters.name, 'Windows') }}:
+          # Windows.
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathtoPublish: 'target/release/discord-statistics.exe'
+              artifactName: 'discord-statistics-windows.exe'
+            displayName: Publish build artifacts
+      - ${{ if eq(parameters.name, 'Linux') }}:
+          # Linux.
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathtoPublish: 'target/release/discord-statistics'
+              artifactName: 'discord-statistics-linux'
+            displayName: Publish build artifacts
+      - ${{ if eq(parameters.name, 'macOS') }}:
+          # macOS.
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathtoPublish: 'target/release/discord-statistics'
+              artifactName: 'discord-statistics-macos'
+            displayName: Publish build artifacts
+
