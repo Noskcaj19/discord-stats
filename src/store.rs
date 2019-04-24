@@ -43,37 +43,56 @@ impl StatsStore {
     }
 
     pub fn insert_edit(&self, update: &MessageUpdateEvent) {
-        let q: rusqlite::Result<(i64, String)> = self.conn.lock().query_row(
+        let q: rusqlite::Result<(i64, String, String)> = self.conn.lock().query_row(
             GET_EDIT_ID_CONTENT_BY_ID,
             &[&update.id.to_string() as &ToSql],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         );
         match q {
-            Ok((edit_id, content)) => {
-                let mut edits: Vec<String> = match serde_json::from_str(&content) {
+            Ok((edit_id, ref time, ref content)) => {
+                let mut times: Vec<String> = match serde_json::from_str(time) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        println!("Error deserializing event times: {:#?}", e);
+                        return;
+                    }
+                };
+                let mut edits: Vec<String> = match serde_json::from_str(content) {
                     Ok(v) => v,
                     Err(e) => {
                         println!("Error deserializing event content: {:#?}", e);
                         return;
                     }
                 };
+
+                if let Some(ref timestamp) = update.timestamp {
+                    times.push(timestamp.to_rfc3339())
+                }
                 if let Some(ref new_content) = update.content {
                     edits.push(new_content.clone())
                 }
                 // Update existing row
-                let data = &[&serde_json::to_string(&edits).unwrap() as &ToSql, &edit_id];
+                let data = &[
+                    &serde_json::to_string(&times).unwrap() as &ToSql,
+                    &serde_json::to_string(&edits).unwrap(),
+                    &edit_id,
+                ];
                 if let Err(e) = self.conn.lock().execute(UPDATE_EDIT_SQL, data) {
                     eprintln!("Failed to update edit: {}", e);
                 }
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 // Insert new edit row
+                let time = update.edited_timestamp.map(|t| t.to_rfc3339());
+                let serialized_time = serde_json::to_string(&vec![time]).unwrap();
+                let content =
+                    serde_json::to_string(&update.content.as_ref().map(|c| vec![c.clone()]))
+                        .unwrap();
                 let data = &[
                     &update.id.to_string() as &ToSql,
                     &update.channel_id.to_string(),
-                    &update.timestamp.map(|t| t.to_rfc3339()),
-                    &serde_json::to_string(&update.content.as_ref().map(|c| vec![c.clone()]))
-                        .unwrap(),
+                    &serialized_time,
+                    &content,
                 ];
                 if let Err(e) = self.conn.lock().execute(INSERT_EDIT_SQL, data) {
                     eprintln!("Failed to insert edit: {}", e);
@@ -132,8 +151,8 @@ CREATE TABLE IF NOT EXISTS Edits
     EditId          INTEGER PRIMARY KEY,
     MessageId       TEXT,
     ChannelId       TEXT,
-    Time            TEXT,
-    EditContent     TEXT
+    Times           TEXT,
+    EditContents    TEXT
 )";
 
 // language=sql
@@ -152,16 +171,16 @@ const GET_GUILDS_SQL: &'static str = "SELECT DISTINCT GuildId FROM Messages";
 
 // language=sql
 const INSERT_EDIT_SQL: &'static str = "
-INSERT INTO Edits (MessageId, ChannelId, Time, EditContent)
+INSERT INTO Edits (MessageId, ChannelId, Times, EditContents)
 VALUES (?1, ?2, ?3, ?4)";
 
 // Gets the edit id and content of an edit by its message id
 // language=sql
 const GET_EDIT_ID_CONTENT_BY_ID: &'static str = "
-SELECT EditId, EditContent FROM Edits WHERE MessageId = ?
+SELECT EditId, Times, EditContents FROM Edits WHERE MessageId = ?
 ";
 
 // language=sql
 const UPDATE_EDIT_SQL: &'static str = "
-UPDATE Edits SET EditContent = ? WHERE EditId = ?
+UPDATE Edits SET Times = ?, EditContents = ? WHERE EditId = ?
 ";
