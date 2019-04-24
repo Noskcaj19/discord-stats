@@ -1,6 +1,7 @@
 use rusqlite::{Connection as SqliteConnection, ToSql, NO_PARAMS};
 use serenity::model::event::MessageUpdateEvent;
 use serenity::{model::channel::Message, prelude::Mutex};
+use std::path::Path;
 use std::sync::Arc;
 
 pub struct StatsStore {
@@ -14,14 +15,14 @@ pub struct Channel {
 }
 
 impl StatsStore {
-    pub fn new() -> Result<StatsStore, rusqlite::Error> {
+    pub fn new(path: &Path) -> Result<StatsStore, rusqlite::Error> {
         Ok(StatsStore {
-            conn: Arc::new(Mutex::new(StatsStore::setup_connection()?)),
+            conn: Arc::new(Mutex::new(StatsStore::setup_connection(path)?)),
         })
     }
 
-    fn setup_connection() -> Result<SqliteConnection, rusqlite::Error> {
-        let conn = SqliteConnection::open("db.sqlite3").expect("Unable to open databasse");
+    fn setup_connection(path: &Path) -> Result<SqliteConnection, rusqlite::Error> {
+        let conn = SqliteConnection::open(path).expect("Unable to open database");
 
         conn.execute(CREATE_MSGS_TABLE_SQL, NO_PARAMS)?;
         conn.execute(CREATE_EDITS_TABLE_SQL, NO_PARAMS)?;

@@ -71,13 +71,14 @@ impl Config {
 
 fn main() {
     let config = Config::load();
+    let db_path = Config::data_root().unwrap().join("store.sqlite3");
 
     let token = std::env::var("DISCORD_TOKEN").unwrap_or(config.discord_token);
     if token.is_empty() || serenity::client::validate_token(&token).is_err() {
         eprintln!("Empty or invalid token, exiting");
         return;
     }
-    let stats = match StatsStore::new() {
+    let stats = match StatsStore::new(&db_path) {
         Ok(conn) => Arc::new(conn),
         Err(_) => {
             eprintln!("Unable to construct tables. aborting");
