@@ -134,7 +134,7 @@ impl StatsStore {
 }
 
 // language=sql
-const CREATE_MSGS_TABLE_SQL: &'static str = r#"CREATE TABLE IF NOT EXISTS Messages
+const CREATE_MSGS_TABLE_SQL: &str = r#"CREATE TABLE IF NOT EXISTS Messages
 (
     EventId    INTEGER PRIMARY KEY,
     MessageId  INTEGER,
@@ -146,7 +146,7 @@ const CREATE_MSGS_TABLE_SQL: &'static str = r#"CREATE TABLE IF NOT EXISTS Messag
 );"#;
 
 // language=sql
-const CREATE_EDITS_TABLE_SQL: &'static str = r"
+const CREATE_EDITS_TABLE_SQL: &str = r"
 CREATE TABLE IF NOT EXISTS Edits
 (
     EditId          INTEGER PRIMARY KEY,
@@ -157,31 +157,31 @@ CREATE TABLE IF NOT EXISTS Edits
 )";
 
 // language=sql
-const INSERT_MSG_SQL: &'static str = r#"INSERT INTO main.Messages
+const INSERT_MSG_SQL: &str = r#"INSERT INTO main.Messages
     (MessageId, Time, Content, ChannelId, GuildId, AuthorId)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6);"#;
 
 // language=sql
-const GET_MSG_COUNT_SQL: &'static str = r#"SELECT COUNT(*) FROM Messages"#;
+const GET_MSG_COUNT_SQL: &str = r#"SELECT COUNT(*) FROM Messages"#;
 
 // language=sql
-const GET_CHANNELS_SQL: &'static str = "SELECT DISTINCT ChannelId, GuildId FROM Messages";
+const GET_CHANNELS_SQL: &str = "SELECT DISTINCT ChannelId, GuildId FROM Messages";
 
 // language=sql
-const GET_GUILDS_SQL: &'static str = "SELECT DISTINCT GuildId FROM Messages";
+const GET_GUILDS_SQL: &str = "SELECT DISTINCT GuildId FROM Messages";
 
 // language=sql
-const INSERT_EDIT_SQL: &'static str = "
+const INSERT_EDIT_SQL: &str = "
 INSERT INTO Edits (MessageId, ChannelId, Times, EditContents)
 VALUES (?1, ?2, ?3, ?4)";
 
 // Gets the edit id and content of an edit by its message id
 // language=sql
-const GET_EDIT_ID_CONTENT_BY_ID: &'static str = "
+const GET_EDIT_ID_CONTENT_BY_ID: &str = "
 SELECT EditId, Times, EditContents FROM Edits WHERE MessageId = ?
 ";
 
 // language=sql
-const UPDATE_EDIT_SQL: &'static str = "
+const UPDATE_EDIT_SQL: &str = "
 UPDATE Edits SET Times = ?, EditContents = ? WHERE EditId = ?
 ";

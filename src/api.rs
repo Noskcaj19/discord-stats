@@ -5,7 +5,7 @@ use iron::typemap::Key;
 use persistent::Read;
 use std::sync::Arc;
 
-const DASHBOARD_SOURCE: &'static str = include_str!("../web/build/index.html");
+const DASHBOARD_SOURCE: &str = include_str!("../web/build/index.html");
 
 #[derive(Copy, Clone)]
 pub struct Stats;

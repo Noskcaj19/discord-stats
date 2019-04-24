@@ -1,7 +1,9 @@
 use iron::{Chain, Iron};
 use persistent::Read;
 use router::router;
+use serde_derive::{Deserialize, Serialize};
 use serenity::prelude::*;
+use std::fs::DirBuilder;
 use std::sync::Arc;
 use std::thread;
 
@@ -11,8 +13,70 @@ use store::StatsStore;
 mod api;
 mod event_handler;
 
+#[derive(Serialize, Deserialize)]
+struct Config {
+    discord_token: String,
+    tracked_channels: Vec<String>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            discord_token: String::new(),
+            tracked_channels: Vec::new(),
+        }
+    }
+}
+
+impl Config {
+    pub fn load() -> Config {
+        let config_path =
+            Config::config_path().expect("Unable to find users home dir or config path");
+
+        if !config_path.exists() {
+            DirBuilder::new()
+                .recursive(true)
+                .create(config_path.parent().expect("Config path has no parent?"))
+                .expect(&format!(
+                    "Unable to create config folder at {:?}",
+                    config_path
+                ));
+            let conf = Config::default();
+            std::fs::write(&config_path, toml::to_string(&conf).unwrap()).expect(&format!(
+                "Unable to write default config values to {:?}",
+                &config_path
+            ));
+            conf
+        } else {
+            let config_str =
+                std::fs::read_to_string(config_path).expect("Unable to read config file");
+            toml::from_str(&config_str).expect("Invalid config file")
+        }
+    }
+
+    pub fn config_path() -> Option<std::path::PathBuf> {
+        Config::data_root().map(|h| h.join("config.toml"))
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn data_root() -> Option<std::path::PathBuf> {
+        dirs::home_dir().map(|h| h.join(".config/discord-statistics/"))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn data_root() -> Option<std::path::PathBuf> {
+        dirs::config_dir().map(|h| h.join("discord-statistics/"))
+    }
+}
+
 fn main() {
-    let token = std::env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN not found");
+    let config = Config::load();
+
+    let token = std::env::var("DISCORD_TOKEN").unwrap_or(config.discord_token);
+    if token.is_empty() || serenity::client::validate_token(&token).is_err() {
+        eprintln!("Empty or invalid token, exiting");
+        return;
+    }
     let stats = match StatsStore::new() {
         Ok(conn) => Arc::new(conn),
         Err(_) => {
