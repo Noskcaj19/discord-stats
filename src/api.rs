@@ -5,6 +5,8 @@ use iron::typemap::Key;
 use persistent::Read;
 use std::sync::Arc;
 
+const DASHBOARD_SOURCE: &'static str = include_str!("../web/build/index.html");
+
 #[derive(Copy, Clone)]
 pub struct Stats;
 impl Key for Stats {
@@ -45,4 +47,10 @@ pub fn get_guilds(req: &mut Request) -> IronResult<Response> {
             Response::with((status::InternalServerError, "[]"))
         }
     })
+}
+
+pub fn dashboard(_rq: &mut Request) -> IronResult<Response> {
+    let mut resp = Response::with((status::Ok, DASHBOARD_SOURCE));
+    resp.headers.set(iron::headers::ContentType::html());
+    Ok(resp)
 }

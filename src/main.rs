@@ -29,7 +29,9 @@ fn main() {
         let router = router! {
             api_msg_count: get "/api/msg_count" => api::msg_count,
             api_channels: get "/api/channels" => api::get_channels,
-            api_guilds: get "/api/guilds" => api::get_guilds
+            api_guilds: get "/api/guilds" => api::get_guilds,
+            dashboard_g: get "/*" => api::dashboard,
+            dashboard: get "/" => api::dashboard,
         };
 
         let mut chain = Chain::new(router);
