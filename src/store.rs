@@ -9,7 +9,7 @@ pub struct StatsStore {
 
 #[derive(serde_derive::Serialize, Debug)]
 pub struct Channel {
-    pub channel_id: String,
+    pub channel_id: i64,
     pub guild_id: Option<String>,
 }
 
@@ -30,12 +30,12 @@ impl StatsStore {
 
     pub fn insert_msg(&self, msg: &Message) {
         let data = &[
-            &msg.id.to_string() as &ToSql,
+            &(msg.id.0 as i64) as &ToSql,
             &msg.timestamp.to_rfc3339(),
             &msg.content,
-            &msg.channel_id.to_string(),
-            &msg.guild_id.map(|x| x.to_string()),
-            &msg.author.id.to_string(),
+            &(msg.channel_id.0 as i64),
+            &msg.guild_id.map(|x| x.0 as i64),
+            &(msg.author.id.0 as i64),
         ];
         if let Err(e) = self.conn.lock().execute(INSERT_MSG_SQL, data) {
             eprintln!("Failed to insert message: {}", e);
@@ -43,11 +43,12 @@ impl StatsStore {
     }
 
     pub fn insert_edit(&self, update: &MessageUpdateEvent) {
-        let q: rusqlite::Result<(i64, String, String)> = self.conn.lock().query_row(
-            GET_EDIT_ID_CONTENT_BY_ID,
-            &[&update.id.to_string() as &ToSql],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        );
+        let q: rusqlite::Result<(i64, String, String)> =
+            self.conn
+                .lock()
+                .query_row(GET_EDIT_ID_CONTENT_BY_ID, &[update.id.0 as i64], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                });
         match q {
             Ok((edit_id, ref time, ref content)) => {
                 let mut times: Vec<String> = match serde_json::from_str(time) {
@@ -89,8 +90,8 @@ impl StatsStore {
                     serde_json::to_string(&update.content.as_ref().map(|c| vec![c.clone()]))
                         .unwrap();
                 let data = &[
-                    &update.id.to_string() as &ToSql,
-                    &update.channel_id.to_string(),
+                    &(update.id.0 as i64) as &ToSql,
+                    &(update.channel_id.0 as i64),
                     &serialized_time,
                     &content,
                 ];
@@ -104,7 +105,7 @@ impl StatsStore {
         };
     }
 
-    pub fn get_msg_count(&self) -> rusqlite::Result<i32> {
+    pub fn get_msg_count(&self) -> rusqlite::Result<i64> {
         self.conn
             .lock()
             .query_row(GET_MSG_COUNT_SQL, NO_PARAMS, |row| row.get(0))
@@ -136,12 +137,12 @@ impl StatsStore {
 const CREATE_MSGS_TABLE_SQL: &'static str = r#"CREATE TABLE IF NOT EXISTS Messages
 (
     EventId    INTEGER PRIMARY KEY,
-    MessageId  TEXT,
+    MessageId  INTEGER,
     Time       TEXT,
     Content    TEXT,
-    ChannelId  TEXT,
-    GuildId    TEXT,
-    AuthorId   TEXT
+    ChannelId  INTEGER,
+    GuildId    INTEGER,
+    AuthorId   INTEGER
 );"#;
 
 // language=sql
@@ -149,8 +150,8 @@ const CREATE_EDITS_TABLE_SQL: &'static str = r"
 CREATE TABLE IF NOT EXISTS Edits
 (
     EditId          INTEGER PRIMARY KEY,
-    MessageId       TEXT,
-    ChannelId       TEXT,
+    MessageId       INTEGER,
+    ChannelId       INTEGER,
     Times           TEXT,
     EditContents    TEXT
 )";
