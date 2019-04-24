@@ -54,6 +54,13 @@ impl Config {
         }
     }
 
+    pub fn save(&self) -> std::io::Result<()> {
+        let config_path =
+            Config::config_path().expect("Unable to find users home dir or config path");
+
+        std::fs::write(config_path, toml::to_string(self).unwrap())
+    }
+
     pub fn config_path() -> Option<std::path::PathBuf> {
         Config::data_root().map(|h| h.join("config.toml"))
     }
@@ -70,12 +77,36 @@ impl Config {
 }
 
 fn main() {
-    let config = Config::load();
+    let mut config = Config::load();
     let db_path = Config::data_root().unwrap().join("store.sqlite3");
+
+    use clap::{App, Arg, SubCommand};
+    let matches = App::new("Discord statistics")
+        .author("Noskcaj19")
+        .subcommand(
+            SubCommand::with_name("token")
+                .about("Store your Discord token")
+                .arg(
+                    Arg::with_name("token")
+                        .required(true)
+                        .help("Discord user token"),
+                ),
+        )
+        .get_matches();
+
+    if let Some(store_token) = matches.subcommand_matches("store-token") {
+        let token = store_token.value_of("token").unwrap();
+        config.discord_token = token.to_owned();
+
+        config.save().expect("Unable to save configuration");
+
+        println!("Successfully saved discord token");
+        return;
+    }
 
     let token = std::env::var("DISCORD_TOKEN").unwrap_or(config.discord_token);
     if token.is_empty() || serenity::client::validate_token(&token).is_err() {
-        eprintln!("Empty or invalid token, exiting");
+        eprintln!("Empty or invalid token, please set it with `discord-statistics token $DISCORD_TOKEN`, exiting");
         return;
     }
     let stats = match StatsStore::new(&db_path) {
