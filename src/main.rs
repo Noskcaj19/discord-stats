@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::thread;
 
 mod store;
+use serenity::model::id::{ChannelId, GuildId};
 use store::StatsStore;
 
 mod api;
@@ -61,6 +62,27 @@ impl Config {
         std::fs::write(config_path, toml::to_string(self).unwrap())
     }
 
+    pub fn tracked_channels(&self) -> Vec<(Option<GuildId>, ChannelId)> {
+        self.tracked_channels
+            .iter()
+            .map(|i| {
+                if i.contains('|') {
+                    let mut split_item = i.split('|');
+                    let guild = split_item.next().expect("Invalid tracked channel");
+                    let channel = split_item.next().expect("Invalid tracked guild");
+                    (
+                        Some(GuildId(
+                            guild.parse::<u64>().expect("Invalid tracked channel"),
+                        )),
+                        channel.parse().expect("Invalid tracked guild"),
+                    )
+                } else {
+                    (None, i.parse().unwrap())
+                }
+            })
+            .collect::<Vec<_>>()
+    }
+
     pub fn config_path() -> Option<std::path::PathBuf> {
         Config::data_root().map(|h| h.join("config.toml"))
     }
@@ -104,7 +126,7 @@ fn main() {
         return;
     }
 
-    let token = std::env::var("DISCORD_TOKEN").unwrap_or(config.discord_token);
+    let token = std::env::var("DISCORD_TOKEN").unwrap_or(config.discord_token.clone());
     if token.is_empty() || serenity::client::validate_token(&token).is_err() {
         eprintln!("Empty or invalid token, please set it with `discord-statistics token $DISCORD_TOKEN`, exiting");
         return;
@@ -137,8 +159,11 @@ fn main() {
 
     // start discord client
 
-    let mut client = Client::new(&token, event_handler::Handler::with_store(stats))
-        .expect("Error creating client");
+    let mut client = Client::new(
+        &token,
+        event_handler::Handler::new(stats, config.tracked_channels()),
+    )
+    .expect("Error creating client");
 
     if let Err(why) = client.start() {
         eprintln!("Client error: {:?}", why);

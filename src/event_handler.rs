@@ -7,13 +7,18 @@ use crate::store::StatsStore;
 pub struct Handler {
     store: Arc<StatsStore>,
     user: Mutex<RefCell<Option<User>>>,
+    additional_channels: Vec<(Option<GuildId>, ChannelId)>,
 }
 
 impl Handler {
-    pub fn with_store(store: Arc<StatsStore>) -> Handler {
+    pub fn new(
+        store: Arc<StatsStore>,
+        additional_channels: Vec<(Option<GuildId>, ChannelId)>,
+    ) -> Handler {
         Handler {
             store,
             user: Mutex::new(RefCell::new(None)),
+            additional_channels,
         }
     }
 }
@@ -21,7 +26,11 @@ impl Handler {
 impl EventHandler for Handler {
     fn message(&self, _ctx: Context, m: Message) {
         if let Some(ref user) = *self.user.lock().borrow() {
-            if user == &m.author {
+            if user == &m.author
+                || self
+                    .additional_channels
+                    .contains(&(m.guild_id, m.channel_id))
+            {
                 self.store.insert_msg(&m)
             }
         }
