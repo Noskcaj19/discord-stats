@@ -1,5 +1,6 @@
 use rusqlite::{Connection as SqliteConnection, ToSql, NO_PARAMS};
 use serenity::model::event::MessageUpdateEvent;
+use serenity::model::id::{ChannelId, GuildId, MessageId, UserId};
 use serenity::{model::channel::Message, prelude::Mutex};
 use std::path::Path;
 use std::sync::Arc;
@@ -14,6 +15,16 @@ pub struct Channel {
     pub guild_id: Option<String>,
 }
 
+#[derive(Debug)]
+pub struct StoreMessage {
+    pub message_id: MessageId,
+    pub time: i64,
+    pub content: String,
+    pub channel_id: ChannelId,
+    pub guild_id: Option<GuildId>,
+    pub author_id: UserId,
+}
+
 impl StatsStore {
     pub fn new(path: &Path) -> Result<StatsStore, rusqlite::Error> {
         Ok(StatsStore {
@@ -26,6 +37,7 @@ impl StatsStore {
 
         conn.execute(CREATE_MSGS_TABLE_SQL, NO_PARAMS)?;
         conn.execute(CREATE_EDITS_TABLE_SQL, NO_PARAMS)?;
+        conn.execute(CREATE_DELETIONS_TABLE_SQL, NO_PARAMS)?;
         Ok(conn)
     }
 
@@ -106,6 +118,44 @@ impl StatsStore {
         };
     }
 
+    pub fn insert_deletion(&self, channel_id: ChannelId, message_id: MessageId) {
+        let data = &[
+            &(message_id.0 as i64) as &ToSql,
+            &(channel_id.0 as i64),
+            &chrono::offset::Utc::now().timestamp(),
+        ];
+        if let Err(e) = self.conn.lock().execute(INSERT_DELETION_SQL, data) {
+            eprintln!("Failed to insert message: {}", e);
+        }
+    }
+
+    pub fn get_message_with_channel_id(
+        &self,
+        channel_id: ChannelId,
+        message_id: MessageId,
+    ) -> rusqlite::Result<StoreMessage> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            GET_MSG_BY_CHANNEL_ID_AND_ID,
+            &[&(channel_id.0 as i64) as &ToSql, &(message_id.0 as i64)],
+            |row| {
+                let message_id: i64 = row.get(0)?;
+                let channel_id: i64 = row.get(3)?;
+                let guild_id: Option<i64> = row.get(4)?;
+                let guild_id = guild_id.map(|g| GuildId(g as u64));
+                let author_id: i64 = row.get(5)?;
+                Ok(StoreMessage {
+                    message_id: MessageId(message_id as u64),
+                    time: row.get(1)?,
+                    content: row.get(2)?,
+                    channel_id: ChannelId(channel_id as u64),
+                    guild_id,
+                    author_id: UserId(author_id as u64),
+                })
+            },
+        )
+    }
+
     pub fn get_msg_count(&self) -> rusqlite::Result<i64> {
         self.conn
             .lock()
@@ -158,9 +208,34 @@ CREATE TABLE IF NOT EXISTS Edits
 )";
 
 // language=sql
+const CREATE_DELETIONS_TABLE_SQL: &str = "
+CREATE TABLE IF NOT EXISTS Deletions
+(
+    DeleteId    INTEGER PRIMARY KEY,
+    MessageId   INTEGER,
+    ChannelId   INTEGER,
+    Time        INTEGER
+)
+";
+
+// language=sql
+const INSERT_DELETION_SQL: &str = "
+INSERT into Deletions (MessageId, ChannelId, Time)
+VALUES (?1, ?2, ?3)
+";
+
+// language=sql
 const INSERT_MSG_SQL: &str = r#"INSERT INTO main.Messages
     (MessageId, Time, Content, ChannelId, GuildId, AuthorId)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6);"#;
+
+// language=sql
+const GET_MSG_BY_CHANNEL_ID_AND_ID: &str = "
+SELECT MessageId, Time, Content, ChannelId, GuildId, AuthorId
+FROM Messages
+WHERE ChannelId = ?1
+  AND MessageId = ?2
+";
 
 // language=sql
 const GET_MSG_COUNT_SQL: &str = r#"SELECT COUNT(*) FROM Messages"#;

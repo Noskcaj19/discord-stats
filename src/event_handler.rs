@@ -37,6 +37,47 @@ impl EventHandler for Handler {
         }
     }
 
+    fn message_delete(&self, _ctx: Context, channel_id: ChannelId, message_id: MessageId) {
+        if let Ok(msg) = self
+            .store
+            .get_message_with_channel_id(channel_id, message_id)
+        {
+            if let Some(ref user) = *self.user.lock().borrow() {
+                if user.id == msg.author_id
+                    || self
+                        .additional_channels
+                        .contains(&(msg.guild_id, msg.channel_id))
+                {
+                    self.store.insert_deletion(channel_id, message_id);
+                }
+            }
+        }
+    }
+
+    fn message_delete_bulk(
+        &self,
+        _ctx: Context,
+        channel_id: ChannelId,
+        message_ids: Vec<MessageId>,
+    ) {
+        for message_id in message_ids {
+            if let Ok(msg) = self
+                .store
+                .get_message_with_channel_id(channel_id, message_id)
+            {
+                if let Some(ref user) = *self.user.lock().borrow() {
+                    if user.id == msg.author_id
+                        || self
+                            .additional_channels
+                            .contains(&(msg.guild_id, msg.channel_id))
+                    {
+                        self.store.insert_deletion(channel_id, message_id);
+                    }
+                }
+            }
+        }
+    }
+
     fn message_update(
         &self,
         _ctx: Context,
