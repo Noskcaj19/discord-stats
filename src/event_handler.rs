@@ -1,9 +1,9 @@
 use serenity::{model::prelude::*, prelude::*};
 use std::cell::RefCell;
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 
 use crate::store::StatsStore;
-use std::sync::mpsc::{Receiver, Sender};
 
 pub struct Handler {
     store: Arc<StatsStore>,

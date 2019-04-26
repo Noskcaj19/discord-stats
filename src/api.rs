@@ -1,9 +1,10 @@
-use crate::store::StatsStore;
 use iron::prelude::*;
 use iron::status;
 use iron::typemap::Key;
 use persistent::Read;
 use std::sync::Arc;
+
+use crate::store::StatsStore;
 
 const DASHBOARD_SOURCE: &str = include_str!("../web/build/index.html");
 
