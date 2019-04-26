@@ -32,7 +32,7 @@ impl StatsStore {
     pub fn insert_msg(&self, msg: &Message) {
         let data = &[
             &(msg.id.0 as i64) as &ToSql,
-            &msg.timestamp.to_rfc3339(),
+            &msg.timestamp.timestamp(),
             &msg.content,
             &(msg.channel_id.0 as i64),
             &msg.guild_id.map(|x| x.0 as i64),
@@ -52,7 +52,7 @@ impl StatsStore {
                 });
         match q {
             Ok((edit_id, ref time, ref content)) => {
-                let mut times: Vec<String> = match serde_json::from_str(time) {
+                let mut times: Vec<i64> = match serde_json::from_str(time) {
                     Ok(v) => v,
                     Err(e) => {
                         println!("Error deserializing event times: {:#?}", e);
@@ -68,7 +68,7 @@ impl StatsStore {
                 };
 
                 if let Some(ref timestamp) = update.timestamp {
-                    times.push(timestamp.to_rfc3339())
+                    times.push(timestamp.timestamp())
                 }
                 if let Some(ref new_content) = update.content {
                     edits.push(new_content.clone())
@@ -85,7 +85,7 @@ impl StatsStore {
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 // Insert new edit row
-                let time = update.edited_timestamp.map(|t| t.to_rfc3339());
+                let time = update.edited_timestamp.map(|t| t.timestamp());
                 let serialized_time = serde_json::to_string(&vec![time]).unwrap();
                 let content =
                     serde_json::to_string(&update.content.as_ref().map(|c| vec![c.clone()]))
@@ -139,7 +139,7 @@ const CREATE_MSGS_TABLE_SQL: &str = r#"CREATE TABLE IF NOT EXISTS Messages
 (
     EventId    INTEGER PRIMARY KEY,
     MessageId  INTEGER,
-    Time       TEXT,
+    Time       INTEGER,
     Content    TEXT,
     ChannelId  INTEGER,
     GuildId    INTEGER,
