@@ -2,17 +2,18 @@ use iron::{Chain, Iron};
 use persistent::Read;
 use router::router;
 use serde_derive::{Deserialize, Serialize};
+use serenity::model::id::{ChannelId, GuildId};
 use serenity::prelude::*;
 use std::fs::DirBuilder;
 use std::sync::Arc;
 use std::thread;
 
 mod store;
-use serenity::model::id::{ChannelId, GuildId};
 use store::StatsStore;
 
 mod api;
 mod event_handler;
+use event_handler::OneshotData;
 
 #[derive(Serialize, Deserialize)]
 struct Config {
@@ -114,6 +115,20 @@ fn main() {
                         .help("Discord user token"),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("track")
+                .about("Start tracking a channel")
+                .arg(
+                    Arg::with_name("group-name")
+                        .required(true)
+                        .help("Guild name or private channel user"),
+                )
+                .arg(
+                    Arg::with_name("channel-name")
+                        .required(false)
+                        .help("Channel name if guild is provided"),
+                ),
+        )
         .get_matches();
 
     if let Some(store_token) = matches.subcommand_matches("store-token") {
@@ -131,6 +146,35 @@ fn main() {
         eprintln!("Empty or invalid token, please set it with `discord-statistics token $DISCORD_TOKEN`, exiting");
         return;
     }
+
+    if let Some(track) = matches.subcommand_matches("track") {
+        // Name of the private channel user or guild
+        let group_name = track.value_of("group-name").unwrap();
+        let (rx, handler) = event_handler::OneshotHandler::new();
+        let mut client = Client::new(&token, handler).expect("Unable to create client");
+        thread::spawn(move || {
+            client.start().expect("Unable starting discord client");
+        });
+        let data = rx.recv().expect("Unable to retrieve discord data");
+
+        let id_str = if let Some(channel_name) = track.value_of("channel-name") {
+            resolve_guild_channel_names(&data, group_name, channel_name)
+                .map(|(gid, cid)| format!("{}|{}", gid.0, cid.0))
+        } else {
+            resolve_private_channel(&data, group_name).map(|id| id.0.to_string())
+        };
+        match id_str {
+            Some(id_str) => {
+                config.tracked_channels.push(id_str);
+                println!("Added channel to tracking list");
+                config.save().expect("Unable to save config")
+            }
+            None => eprintln!("Unable to find a matching channel"),
+        }
+
+        return;
+    }
+
     let stats = match StatsStore::new(&db_path) {
         Ok(conn) => Arc::new(conn),
         Err(_) => {
@@ -158,14 +202,54 @@ fn main() {
     });
 
     // start discord client
-
-    let mut client = Client::new(
-        &token,
-        event_handler::Handler::new(stats, config.tracked_channels()),
-    )
-    .expect("Error creating client");
+    let handler = event_handler::Handler::new(stats.clone(), config.tracked_channels());
+    let mut client = Client::new(&token, handler).expect("Error creating client");
 
     if let Err(why) = client.start() {
         eprintln!("Client error: {:?}", why);
     }
+}
+
+fn resolve_guild_channel_names(
+    data: &OneshotData,
+    guild_name: &str,
+    channel_name: &str,
+) -> Option<(GuildId, ChannelId)> {
+    for guild in &data.ready.guilds {
+        use serenity::model::guild::GuildStatus::*;
+        let (guild_id, name) = match guild {
+            OnlinePartialGuild(g) => (g.id, g.name.clone()),
+            OnlineGuild(g) => (g.id, g.name.clone()),
+            Offline(g) => (
+                g.id,
+                g.id.to_partial_guild(&data.context.http)
+                    .expect("Unable to fetch guild data")
+                    .name
+                    .clone(),
+            ),
+            _ => panic!("Unknown guild state"),
+        };
+
+        if guild_name.to_lowercase() == name.to_lowercase() {
+            let channels = guild_id
+                .channels(&data.context.http)
+                .expect("Unable to fetch guild channels");
+
+            for (&channel_id, channel) in channels.iter() {
+                if channel_name.to_lowercase() == channel.name.to_lowercase() {
+                    return Some((guild_id, channel_id));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn resolve_private_channel(data: &OneshotData, user_name: &str) -> Option<ChannelId> {
+    for (&id, channel) in data.ready.private_channels.iter() {
+        if user_name.to_lowercase() == format!("{}", channel).to_lowercase() {
+            return Some(id);
+        }
+    }
+    None
 }

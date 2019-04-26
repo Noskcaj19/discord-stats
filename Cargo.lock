@@ -1304,7 +1304,7 @@ dependencies = [
 [[package]]
 name = "serenity"
 version = "0.5.11"
-source = "git+https://github.com/terminal-discord/serenity?branch=v0.6.x#2b453c365c0169475c67977f2e081f67083b734a"
+source = "git+https://github.com/terminal-discord/serenity?branch=v0.6.x#c9550d7abeff32b701148c7cb3e34af6b0b19afd"
 dependencies = [
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",

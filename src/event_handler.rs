@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::store::StatsStore;
+use std::sync::mpsc::{Receiver, Sender};
 
 pub struct Handler {
     store: Arc<StatsStore>,
@@ -56,5 +57,29 @@ impl EventHandler for Handler {
         println!("{} is connected", ready.user.name);
         *self.user.lock().borrow_mut() = Some(ready.user.into());
         ctx.set_presence(None, serenity::model::user::OnlineStatus::Offline);
+    }
+}
+
+pub struct OneshotData {
+    pub context: Context,
+    pub ready: Ready,
+}
+
+pub struct OneshotHandler {
+    tx: Arc<Mutex<Sender<OneshotData>>>,
+}
+
+impl OneshotHandler {
+    pub fn new() -> (Receiver<OneshotData>, OneshotHandler) {
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let tx = Arc::new(Mutex::new(tx));
+        (rx, OneshotHandler { tx })
+    }
+}
+
+impl EventHandler for OneshotHandler {
+    fn ready(&self, context: Context, ready: Ready) {
+        let _ = self.tx.lock().send(OneshotData { context, ready });
     }
 }
