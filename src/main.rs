@@ -236,6 +236,12 @@ fn resolve_guild_channel_names(
                 .expect("Unable to fetch guild channels");
 
             for (&channel_id, channel) in channels.iter() {
+                use serenity::model::channel::ChannelType::*;
+                match channel.kind {
+                    Text | Private | Group | News => {}
+                    _ => continue,
+                }
+
                 if channel_name.to_lowercase() == channel.name.to_lowercase() {
                     return Some((guild_id, channel_id));
                 }
