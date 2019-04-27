@@ -1,0 +1,10 @@
+{
+  "name": "dashboard",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "author": "Noskcaj19",
+  "license": "MIT",
+  "devDependencies": {
+    "sass": "^1.19.0"
+  }
+}

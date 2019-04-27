@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use crate::store::StatsStore;
 
-const DASHBOARD_SOURCE: &str = include_str!("../web/build/index.html");
+#[cfg(not(debug_assertions))]
+const DASHBOARD_SOURCE: &str = include_str!("../web/src/index.html");
+#[cfg(not(debug_assertions))]
+const DASHBOARD_JS_SOURCE: &str = include_str!("../web/dist/index.js");
 
 #[derive(Copy, Clone)]
 pub struct Stats;
@@ -50,8 +53,34 @@ pub fn get_guilds(req: &mut Request) -> IronResult<Response> {
     })
 }
 
+#[cfg(not(debug_assertions))]
 pub fn dashboard(_rq: &mut Request) -> IronResult<Response> {
     let mut resp = Response::with((status::Ok, DASHBOARD_SOURCE));
     resp.headers.set(iron::headers::ContentType::html());
+    Ok(resp)
+}
+
+#[cfg(not(debug_assertions))]
+pub fn dashboard_js(_rq: &mut Request) -> IronResult<Response> {
+    Ok(Response::with((status::Ok, DASHBOARD_JS_SOURCE)))
+}
+
+#[cfg(debug_assertions)]
+pub fn dashboard(_rq: &mut Request) -> IronResult<Response> {
+    let mut resp = Response::with((
+        status::Ok,
+        "<html><script>fetch(\"http://localhost:1234/index.html\").then(x=>x.text()).then(x=>document.documentElement.innerHTML=x)</script></html>",
+    ));
+    resp.headers.set(iron::headers::ContentType::html());
+    Ok(resp)
+}
+
+#[cfg(debug_assertions)]
+pub fn dashboard_js(_rq: &mut Request) -> IronResult<Response> {
+    let mut resp = Response::with((status::MovedPermanently, ""));
+    resp.headers.set(iron::headers::Location(
+        "http://localhost:1234/index.js".into(),
+    ));
+
     Ok(resp)
 }

@@ -192,6 +192,7 @@ fn main() {
             api_msg_count: get "/api/msg_count" => api::msg_count,
             api_channels: get "/api/channels" => api::get_channels,
             api_guilds: get "/api/guilds" => api::get_guilds,
+            dashboard_js: get "/index.js" => api::dashboard_js,
             dashboard_g: get "/*" => api::dashboard,
             dashboard: get "/" => api::dashboard,
         };
