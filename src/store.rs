@@ -12,7 +12,7 @@ pub struct StatsStore {
 #[derive(serde_derive::Serialize, Debug)]
 pub struct Channel {
     pub channel_id: i64,
-    pub guild_id: Option<String>,
+    pub guild_id: Option<i64>,
 }
 
 #[derive(Debug)]
