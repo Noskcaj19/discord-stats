@@ -22,18 +22,38 @@ impl Handler {
             additional_channels,
         }
     }
+
+    fn should_handle(
+        &self,
+        user_id: UserId,
+        guild_id: Option<GuildId>,
+        channel_id: ChannelId,
+    ) -> bool {
+        if let Some(ref current_user) = *self.user.lock().borrow() {
+            if current_user.id == user_id
+                || self.additional_channels.contains(&(guild_id, channel_id))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    #[allow(dead_code)]
+    fn should_handle_no_guild(&self, user_id: UserId) -> bool {
+        if let Some(ref current_user) = *self.user.lock().borrow() {
+            if current_user.id == user_id {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl EventHandler for Handler {
     fn message(&self, _ctx: Context, m: Message) {
-        if let Some(ref user) = *self.user.lock().borrow() {
-            if user == &m.author
-                || self
-                    .additional_channels
-                    .contains(&(m.guild_id, m.channel_id))
-            {
-                self.store.insert_msg(&m)
-            }
+        if self.should_handle(m.author.id, m.guild_id, m.channel_id) {
+            self.store.insert_msg(&m)
         }
     }
 
@@ -42,14 +62,8 @@ impl EventHandler for Handler {
             .store
             .get_message_with_channel_id(channel_id, message_id)
         {
-            if let Some(ref user) = *self.user.lock().borrow() {
-                if user.id == msg.author_id
-                    || self
-                        .additional_channels
-                        .contains(&(msg.guild_id, msg.channel_id))
-                {
-                    self.store.insert_deletion(channel_id, message_id);
-                }
+            if self.should_handle(msg.author_id, msg.guild_id, msg.channel_id) {
+                self.store.insert_deletion(channel_id, message_id);
             }
         }
     }
@@ -65,14 +79,8 @@ impl EventHandler for Handler {
                 .store
                 .get_message_with_channel_id(channel_id, message_id)
             {
-                if let Some(ref user) = *self.user.lock().borrow() {
-                    if user.id == msg.author_id
-                        || self
-                            .additional_channels
-                            .contains(&(msg.guild_id, msg.channel_id))
-                    {
-                        self.store.insert_deletion(channel_id, message_id);
-                    }
+                if self.should_handle(msg.author_id, msg.guild_id, msg.channel_id) {
+                    self.store.insert_deletion(channel_id, message_id);
                 }
             }
         }
@@ -81,15 +89,15 @@ impl EventHandler for Handler {
     fn message_update(
         &self,
         _ctx: Context,
-        _old: Option<Message>,
-        _new: Option<Message>,
+        old: Option<Message>,
+        new: Option<Message>,
         update: MessageUpdateEvent,
     ) {
-        if let Some(ref user) = *self.user.lock().borrow() {
-            if let Some(ref author) = update.author {
-                if user == author {
-                    self.store.insert_edit(&update)
-                }
+        if let Some(ref author) = update.author {
+            let msg = new.or(old);
+            let guild = msg.as_ref().and_then(|msg| msg.guild_id);
+            if self.should_handle(author.id, guild, update.channel_id) {
+                self.store.insert_edit(&update)
             }
         }
     }
