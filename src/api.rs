@@ -69,7 +69,7 @@ pub fn dashboard_js(_rq: &mut Request) -> IronResult<Response> {
 pub fn dashboard(_rq: &mut Request) -> IronResult<Response> {
     let mut resp = Response::with((
         status::Ok,
-        "<html><script>fetch(\"http://localhost:1234/index.html\").then(x=>x.text()).then(x=>document.documentElement.innerHTML=x)</script></html>",
+        std::fs::read_to_string("web/dist/index.html").unwrap(),
     ));
     resp.headers.set(iron::headers::ContentType::html());
     Ok(resp)
