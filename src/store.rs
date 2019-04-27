@@ -175,12 +175,21 @@ impl StatsStore {
         .map(|rows| rows.flatten().collect::<Vec<_>>())
     }
 
-    pub fn get_guilds(&self) -> rusqlite::Result<Vec<String>> {
+    pub fn get_guilds(&self) -> rusqlite::Result<Vec<u64>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(GET_GUILDS_SQL)?;
 
-        stmt.query_map(NO_PARAMS, |row| row.get(0))
-            .map(|rows| rows.flatten().collect::<Vec<_>>())
+        stmt.query_map(NO_PARAMS, |row| row.get(0)).map(|rows| {
+            let mut out: Vec<Option<i64>> = Vec::new();
+
+            for r in rows {
+                if let Ok(i) = r {
+                    out.push(i);
+                }
+            }
+
+            out.iter().flatten().map(|&g| g as u64).collect()
+        })
     }
 }
 
