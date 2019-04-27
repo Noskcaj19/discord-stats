@@ -23,6 +23,17 @@ jobs:
               echo "##vso[task.setvariable variable=PATH;]%PATH%;%USERPROFILE%\.cargo\bin"
             displayName: Install rust (windows)
 
+
+      - task: NodeTool@0
+        inputs:
+          versionSpec: '8.x'
+      - bash: |
+          cd web
+          npm install
+          npm install -g parcel
+          npm run build
+        displayName: Build dashboard
+
       # All platforms.
       - script: |
           rustc -Vv

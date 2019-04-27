@@ -4,6 +4,10 @@
   "main": "src/index.js",
   "author": "Noskcaj19",
   "license": "MIT",
+  "scripts": {
+    "serve": "parcel serve src/index.js src/index.html --no-source-maps",
+    "build": "parcel build src/index.js"
+  },
   "devDependencies": {
     "sass": "^1.19.0"
   }
