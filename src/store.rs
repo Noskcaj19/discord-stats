@@ -180,10 +180,10 @@ impl StatsStore {
         self.conn.lock().query_row(query, &[id], |row| row.get(0))
     }
 
-    pub fn get_user_msgs_per_day(&self) -> rusqlite::Result<Vec<(String, i64)>> {
+    pub fn get_user_msgs_per_day(&self) -> rusqlite::Result<Vec<(String, i64, i64)>> {
         // language=sql
         let query = "
-        SELECT DATE(Time, 'unixepoch') msg_date, COUNT(MessageId) msg_count
+        SELECT DATE(Time, 'unixepoch') msg_date, SUM(GuildId IS NOT NULl) msg_count, SUM(GuildId ISNULL)
         From Messages
         WHERE AuthorId = ?
         GROUP BY msg_date
@@ -193,21 +193,21 @@ impl StatsStore {
 
         let id = self.current_user.lock().borrow().unwrap_or(UserId(0)).0 as i64;
 
-        stmt.query_map(&[id], |row| Ok((row.get(0)?, row.get(1)?)))
+        stmt.query_map(&[id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .map(|rows| rows.flatten().collect::<Vec<_>>())
     }
 
-    pub fn get_total_msgs_per_day(&self) -> rusqlite::Result<Vec<(String, i64)>> {
+    pub fn get_total_msgs_per_day(&self) -> rusqlite::Result<Vec<(String, i64, i64)>> {
         // language=sql
         let query = "
-        SELECT DATE(Time, 'unixepoch') msg_date, COUNT(MessageId) msg_count
+        SELECT DATE(Time, 'unixepoch') msg_date, SUM(GuildId IS NOT NULl) msg_count, SUM(GuildId ISNULL)
         From Messages
         GROUP BY msg_date
         ORDER BY msg_date ASC";
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(query)?;
 
-        stmt.query_map(NO_PARAMS, |row| Ok((row.get(0)?, row.get(1)?)))
+        stmt.query_map(NO_PARAMS, |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .map(|rows| rows.flatten().collect::<Vec<_>>())
     }
 
