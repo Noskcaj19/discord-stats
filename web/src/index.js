@@ -10,9 +10,9 @@ window.onload = function populate() {
         let channel_count = channels.filter(i => i['guild_id']).length
         let dm_count = channels.length - channel_count
 
-        stats_textarea.innerText = `Total Messages: ${msg_count['count']}
+        stats_textarea.innerText = `Total logged messages: ${msg_count['count']}
         Logged guilds: ${guilds.length}
         Logged channels: ${channel_count}
-        Logged direct messages: ${dm_count}`
+        Logged direct message channels: ${dm_count}`
     })
 }

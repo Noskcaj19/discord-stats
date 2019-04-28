@@ -2,11 +2,13 @@ use rusqlite::{Connection as SqliteConnection, ToSql, NO_PARAMS};
 use serenity::model::event::MessageUpdateEvent;
 use serenity::model::id::{ChannelId, GuildId, MessageId, UserId};
 use serenity::{model::channel::Message, prelude::Mutex};
+use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;
 
 pub struct StatsStore {
     conn: Arc<Mutex<SqliteConnection>>,
+    current_user: Mutex<RefCell<Option<UserId>>>,
 }
 
 #[derive(serde_derive::Serialize, Debug)]
@@ -29,6 +31,7 @@ impl StatsStore {
     pub fn new(path: &Path) -> Result<StatsStore, rusqlite::Error> {
         Ok(StatsStore {
             conn: Arc::new(Mutex::new(StatsStore::setup_connection(path)?)),
+            current_user: Mutex::new(RefCell::new(None)),
         })
     }
 
@@ -39,6 +42,10 @@ impl StatsStore {
         conn.execute(CREATE_EDITS_TABLE_SQL, NO_PARAMS)?;
         conn.execute(CREATE_DELETIONS_TABLE_SQL, NO_PARAMS)?;
         Ok(conn)
+    }
+
+    pub fn set_current_user(&self, user_id: UserId) {
+        *self.current_user.lock().get_mut() = Some(user_id)
     }
 
     pub fn insert_msg(&self, msg: &Message) {
