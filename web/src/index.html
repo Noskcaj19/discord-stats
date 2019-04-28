@@ -7,6 +7,12 @@
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css"/>
     <script src="index.js"></script>
+    <!-- Load c3.css -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/c3/0.7.0/c3.min.css" rel="stylesheet">
+
+    <!-- Load d3.js and c3.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.9.2/d3.min.js" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/c3/0.7.0/c3.min.js"></script>
 </head>
 <body>
 <section class="section">
@@ -16,6 +22,7 @@
         <h1 class="title">Discord Statistics</h1>
 
         <p class="p" id="stats"></p>
+        <div id="vis"></div>
     </div>
 </section>
 </body>

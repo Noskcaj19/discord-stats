@@ -17,14 +17,50 @@ impl Key for Stats {
     type Value = Arc<StatsStore>;
 }
 
-pub fn msg_count(req: &mut Request) -> IronResult<Response> {
+pub fn total_msg_count(req: &mut Request) -> IronResult<Response> {
     let stats = req.get::<Read<Stats>>().unwrap();
 
     Ok(match stats.get_msg_count() {
-        Ok(count) => Response::with((status::Ok, format!(r#"{{"count": {}}}"#, count))),
+        Ok(count) => Response::with((status::Ok, count.to_string())),
         Err(_) => {
             eprintln!("Error getting message count");
-            Response::with((status::NoContent, r#"{{"count": null}}"#.to_owned()))
+            Response::with((status::NoContent, "null".to_owned()))
+        }
+    })
+}
+
+pub fn msg_count(req: &mut Request) -> IronResult<Response> {
+    let stats = req.get::<Read<Stats>>().unwrap();
+
+    Ok(match stats.get_user_msg_count() {
+        Ok(count) => Response::with((status::Ok, count.to_string())),
+        Err(_) => {
+            eprintln!("Error getting message count");
+            Response::with((status::NoContent, "null".to_owned()))
+        }
+    })
+}
+
+pub fn msg_count_per_day(req: &mut Request) -> IronResult<Response> {
+    let stats = req.get::<Read<Stats>>().unwrap();
+
+    Ok(match stats.get_user_msgs_per_day() {
+        Ok(count) => Response::with((status::Ok, serde_json::to_string(&count).unwrap())),
+        Err(_) => {
+            eprintln!("Error getting message count");
+            Response::with((status::NoContent, "null".to_owned()))
+        }
+    })
+}
+
+pub fn total_msg_count_per_day(req: &mut Request) -> IronResult<Response> {
+    let stats = req.get::<Read<Stats>>().unwrap();
+
+    Ok(match stats.get_total_msgs_per_day() {
+        Ok(count) => Response::with((status::Ok, serde_json::to_string(&count).unwrap())),
+        Err(_) => {
+            eprintln!("Error getting message count");
+            Response::with((status::NoContent, r"null".to_owned()))
         }
     })
 }

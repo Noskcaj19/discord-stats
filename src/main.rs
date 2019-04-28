@@ -189,6 +189,9 @@ fn main() {
         println!("Starting webserver");
 
         let router = router! {
+            api_total_msg_count_per_day: get "/api/total_msg_count_per_day" => api::total_msg_count_per_day,
+            api_user_msg_count_per_day: get "/api/user_msg_count_per_day" => api::msg_count_per_day,
+            api_total_msg_count: get "/api/total_msg_count" => api::total_msg_count,
             api_msg_count: get "/api/msg_count" => api::msg_count,
             api_channels: get "/api/channels" => api::get_channels,
             api_guilds: get "/api/guilds" => api::get_guilds,
