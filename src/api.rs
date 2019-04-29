@@ -41,6 +41,18 @@ pub fn msg_count(req: &mut Request) -> IronResult<Response> {
     })
 }
 
+pub fn edit_count(req: &mut Request) -> IronResult<Response> {
+    let stats = req.get::<Read<Stats>>().unwrap();
+
+    Ok(match stats.get_edit_count() {
+        Ok(count) => Response::with((status::Ok, count.to_string())),
+        Err(_) => {
+            eprintln!("Error getting message count");
+            Response::with((status::NoContent, "null".to_owned()))
+        }
+    })
+}
+
 pub fn msg_count_per_day(req: &mut Request) -> IronResult<Response> {
     let stats = req.get::<Read<Stats>>().unwrap();
 

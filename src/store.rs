@@ -211,6 +211,16 @@ impl StatsStore {
             .map(|rows| rows.flatten().collect::<Vec<_>>())
     }
 
+    pub fn get_edit_count(&self) -> rusqlite::Result<i64> {
+        //language=sql
+        let query = "
+        SELECT SUM(json_array_length(EditContents)) FROM Edits;";
+
+        self.conn
+            .lock()
+            .query_row(query, NO_PARAMS, |row| row.get(0))
+    }
+
     pub fn get_channels(&self) -> rusqlite::Result<Vec<Channel>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(GET_CHANNELS_SQL)?;

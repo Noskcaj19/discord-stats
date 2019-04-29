@@ -192,10 +192,11 @@ fn main() {
             api_total_msg_count_per_day: get "/api/total_msg_count_per_day" => api::total_msg_count_per_day,
             api_user_msg_count_per_day: get "/api/user_msg_count_per_day" => api::msg_count_per_day,
             api_total_msg_count: get "/api/total_msg_count" => api::total_msg_count,
-            api_msg_count: get "/api/msg_count" => api::msg_count,
+            api_edit_count: get "/api/edit_count" => api::edit_count,
             api_channels: get "/api/channels" => api::get_channels,
-            api_guilds: get "/api/guilds" => api::get_guilds,
+            api_msg_count: get "/api/msg_count" => api::msg_count,
             dashboard_js: get "/index.js" => api::dashboard_js,
+            api_guilds: get "/api/guilds" => api::get_guilds,
             dashboard_g: get "/*" => api::dashboard,
             dashboard: get "/" => api::dashboard,
         };
