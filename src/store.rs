@@ -13,8 +13,8 @@ pub struct StatsStore {
 
 #[derive(serde_derive::Serialize, Debug)]
 pub struct Channel {
-    pub channel_id: i64,
-    pub guild_id: Option<i64>,
+    pub channel_id: ChannelId,
+    pub guild_id: Option<GuildId>,
 }
 
 #[derive(Debug)]
@@ -50,12 +50,12 @@ impl StatsStore {
 
     pub fn insert_msg(&self, msg: &Message) {
         let data = &[
-            &(msg.id.0 as i64) as &ToSql,
+            &(msg.id.0.to_string()) as &ToSql,
             &msg.timestamp.timestamp(),
             &msg.content,
-            &(msg.channel_id.0 as i64),
-            &msg.guild_id.map(|x| x.0 as i64),
-            &(msg.author.id.0 as i64),
+            &(msg.channel_id.0.to_string()),
+            &msg.guild_id.map(|x| x.0.to_string()),
+            &(msg.author.id.0.to_string()),
         ];
         if let Err(e) = self.conn.lock().execute(INSERT_MSG_SQL, data) {
             eprintln!("Failed to insert message: {}", e);
@@ -63,12 +63,11 @@ impl StatsStore {
     }
 
     pub fn insert_edit(&self, update: &MessageUpdateEvent) {
-        let q: rusqlite::Result<(i64, String, String)> =
-            self.conn
-                .lock()
-                .query_row(GET_EDIT_ID_CONTENT_BY_ID, &[update.id.0 as i64], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                });
+        let q: rusqlite::Result<(i64, String, String)> = self.conn.lock().query_row(
+            GET_EDIT_ID_CONTENT_BY_ID,
+            &[update.id.0.to_string()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        );
         match q {
             Ok((edit_id, ref time, ref content)) => {
                 let mut times: Vec<i64> = match serde_json::from_str(time) {
@@ -110,8 +109,8 @@ impl StatsStore {
                     serde_json::to_string(&update.content.as_ref().map(|c| vec![c.clone()]))
                         .unwrap();
                 let data = &[
-                    &(update.id.0 as i64) as &ToSql,
-                    &(update.channel_id.0 as i64),
+                    &update.id.0.to_string() as &ToSql,
+                    &update.channel_id.0.to_string(),
                     &serialized_time,
                     &content,
                 ];
@@ -127,8 +126,8 @@ impl StatsStore {
 
     pub fn insert_deletion(&self, channel_id: ChannelId, message_id: MessageId) {
         let data = &[
-            &(message_id.0 as i64) as &ToSql,
-            &(channel_id.0 as i64),
+            &message_id.0.to_string() as &ToSql,
+            &channel_id.0.to_string(),
             &chrono::offset::Utc::now().timestamp(),
         ];
         if let Err(e) = self.conn.lock().execute(INSERT_DELETION_SQL, data) {
@@ -144,20 +143,35 @@ impl StatsStore {
         let conn = self.conn.lock();
         conn.query_row(
             GET_MSG_BY_CHANNEL_ID_AND_ID,
-            &[&(channel_id.0 as i64) as &ToSql, &(message_id.0 as i64)],
+            &[
+                &channel_id.0.to_string() as &ToSql,
+                &message_id.0.to_string(),
+            ],
             |row| {
-                let message_id: i64 = row.get(0)?;
-                let channel_id: i64 = row.get(3)?;
-                let guild_id: Option<i64> = row.get(4)?;
-                let guild_id = guild_id.map(|g| GuildId(g as u64));
-                let author_id: i64 = row.get(5)?;
+                let message_id: MessageId = row
+                    .get::<_, String>(0)?
+                    .parse::<u64>()
+                    .expect("invalid message_id")
+                    .into();
+                let channel_id: ChannelId = row
+                    .get::<_, String>(3)?
+                    .parse()
+                    .expect("invalid channel_id");
+                let guild_id: Option<GuildId> = row
+                    .get::<_, Option<String>>(4)?
+                    .map(|g| GuildId(g.parse().expect("invalid guild_id")));
+                let author_id: UserId = row
+                    .get::<_, String>(5)?
+                    .parse::<u64>()
+                    .expect("invalid author_id")
+                    .into();
                 Ok(StoreMessage {
-                    message_id: MessageId(message_id as u64),
+                    message_id: message_id,
                     time: row.get(1)?,
                     content: row.get(2)?,
-                    channel_id: ChannelId(channel_id as u64),
+                    channel_id: channel_id,
                     guild_id,
-                    author_id: UserId(author_id as u64),
+                    author_id: author_id,
                 })
             },
         )
@@ -175,7 +189,13 @@ impl StatsStore {
         FROM Messages
         WHERE AuthorId = ?";
 
-        let id = self.current_user.lock().borrow().unwrap_or(UserId(0)).0 as i64;
+        let id = self
+            .current_user
+            .lock()
+            .borrow()
+            .unwrap_or(UserId(0))
+            .0
+            .to_string();
 
         self.conn.lock().query_row(query, &[id], |row| row.get(0))
     }
@@ -191,7 +211,13 @@ impl StatsStore {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(query)?;
 
-        let id = self.current_user.lock().borrow().unwrap_or(UserId(0)).0 as i64;
+        let id = self
+            .current_user
+            .lock()
+            .borrow()
+            .unwrap_or(UserId(0))
+            .0
+            .to_string();
 
         stmt.query_map(&[id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .map(|rows| rows.flatten().collect::<Vec<_>>())
@@ -227,28 +253,34 @@ impl StatsStore {
 
         stmt.query_map(NO_PARAMS, |row| {
             Ok(Channel {
-                channel_id: row.get(0)?,
-                guild_id: row.get(1)?,
+                channel_id: row
+                    .get::<_, String>(0)?
+                    .parse()
+                    .expect("invalid channel_id"),
+                guild_id: row
+                    .get::<_, Option<String>>(1)?
+                    .map(|g| GuildId(g.parse().expect("invalid guild_id"))),
             })
         })
         .map(|rows| rows.flatten().collect::<Vec<_>>())
     }
 
-    pub fn get_guilds(&self) -> rusqlite::Result<Vec<u64>> {
+    pub fn get_guilds(&self) -> rusqlite::Result<Vec<GuildId>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(GET_GUILDS_SQL)?;
 
-        stmt.query_map(NO_PARAMS, |row| row.get(0)).map(|rows| {
-            let mut out: Vec<Option<i64>> = Vec::new();
+        stmt.query_map(NO_PARAMS, |row| row.get::<_, Option<String>>(0))
+            .map(|rows| {
+                let mut out: Vec<Option<u64>> = Vec::new();
 
-            for r in rows {
-                if let Ok(i) = r {
-                    out.push(i);
+                for r in rows {
+                    if let Ok(i) = r {
+                        out.push(i.map(|i| i.parse().expect("invalid guild_id")));
+                    }
                 }
-            }
 
-            out.iter().flatten().map(|&g| g as u64).collect()
-        })
+                out.iter().flatten().map(|&g| g.into()).collect()
+            })
     }
 }
 
@@ -256,12 +288,12 @@ impl StatsStore {
 const CREATE_MSGS_TABLE_SQL: &str = r#"CREATE TABLE IF NOT EXISTS Messages
 (
     EventId    INTEGER PRIMARY KEY,
-    MessageId  INTEGER,
+    MessageId  TEXT,
     Time       INTEGER,
     Content    TEXT,
-    ChannelId  INTEGER,
-    GuildId    INTEGER,
-    AuthorId   INTEGER
+    ChannelId  TEXT,
+    GuildId    TEXT,
+    AuthorId   TEXT
 );"#;
 
 // language=sql
@@ -269,8 +301,8 @@ const CREATE_EDITS_TABLE_SQL: &str = r"
 CREATE TABLE IF NOT EXISTS Edits
 (
     EditId          INTEGER PRIMARY KEY,
-    MessageId       INTEGER,
-    ChannelId       INTEGER,
+    MessageId       TEXT,
+    ChannelId       TEXT,
     Times           TEXT,
     EditContents    TEXT
 )";
@@ -280,8 +312,8 @@ const CREATE_DELETIONS_TABLE_SQL: &str = "
 CREATE TABLE IF NOT EXISTS Deletions
 (
     DeleteId    INTEGER PRIMARY KEY,
-    MessageId   INTEGER,
-    ChannelId   INTEGER,
+    MessageId   TEXT,
+    ChannelId   TEXT,
     Time        INTEGER
 )
 ";
