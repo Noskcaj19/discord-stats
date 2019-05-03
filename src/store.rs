@@ -11,7 +11,7 @@ pub struct StatsStore {
     current_user: Mutex<RefCell<Option<UserId>>>,
 }
 
-#[derive(serde_derive::Serialize, Debug)]
+#[derive(serde_derive::Serialize, Debug, PartialEq, Eq, Hash)]
 pub struct Channel {
     pub channel_id: ChannelId,
     pub guild_id: Option<GuildId>,
@@ -57,8 +57,8 @@ impl StatsStore {
             &msg.guild_id.map(|x| x.0.to_string()),
             &(msg.author.id.0.to_string()),
         ];
-        if let Err(e) = self.conn.lock().execute(INSERT_MSG_SQL, data) {
-            eprintln!("Failed to insert message: {}", e);
+        if let Err(_e) = self.conn.lock().execute(INSERT_MSG_SQL, data) {
+            //            eprintln!("Failed to insert message: {}", e);
         }
     }
 
@@ -203,11 +203,14 @@ impl StatsStore {
     pub fn get_user_msgs_per_day(&self) -> rusqlite::Result<Vec<(String, i64, i64)>> {
         // language=sql
         let query = "
-        SELECT DATE(Time, 'unixepoch') msg_date, SUM(GuildId IS NOT NULl) msg_count, SUM(GuildId ISNULL)
+        SELECT DATE('now', '-7 days')   date_limit,
+               DATE(Time, 'unixepoch')  msg_date,
+               SUM(GuildId IS NOT NULl) msg_count,
+               SUM(GuildId ISNULL)      priv_msg_count
         From Messages
-        WHERE AuthorId = ?
+        WHERE AuthorId = ? AND msg_date > date_limit
         GROUP BY msg_date
-        ORDER BY msg_date ASC";
+        ORDER BY msg_date DESC";
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(query)?;
 
@@ -219,7 +222,7 @@ impl StatsStore {
             .0
             .to_string();
 
-        stmt.query_map(&[id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        stmt.query_map(&[id], |row| Ok((row.get(1)?, row.get(2)?, row.get(3)?)))
             .map(|rows| rows.flatten().collect::<Vec<_>>())
     }
 
@@ -240,7 +243,7 @@ impl StatsStore {
     pub fn get_edit_count(&self) -> rusqlite::Result<i64> {
         //language=sql
         let query = "
-        SELECT SUM(json_array_length(EditContents)) FROM Edits;";
+        SELECT IFNULL(SUM(json_array_length(EditContents)), 0) FROM Edits;";
 
         self.conn
             .lock()
@@ -285,7 +288,7 @@ impl StatsStore {
 }
 
 // language=sql
-const CREATE_MSGS_TABLE_SQL: &str = r#"CREATE TABLE IF NOT EXISTS Messages
+const CREATE_MSGS_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS Messages
 (
     EventId    INTEGER PRIMARY KEY,
     MessageId  TEXT,
@@ -293,18 +296,20 @@ const CREATE_MSGS_TABLE_SQL: &str = r#"CREATE TABLE IF NOT EXISTS Messages
     Content    TEXT,
     ChannelId  TEXT,
     GuildId    TEXT,
-    AuthorId   TEXT
-);"#;
+    AuthorId   TEXT,
+    UNIQUE (MessageId, ChannelId)
+);";
 
 // language=sql
-const CREATE_EDITS_TABLE_SQL: &str = r"
+const CREATE_EDITS_TABLE_SQL: &str = "
 CREATE TABLE IF NOT EXISTS Edits
 (
     EditId          INTEGER PRIMARY KEY,
     MessageId       TEXT,
     ChannelId       TEXT,
     Times           TEXT,
-    EditContents    TEXT
+    EditContents    TEXT,
+    UNIQUE (MessageId, ChannelId)
 )";
 
 // language=sql
@@ -314,7 +319,8 @@ CREATE TABLE IF NOT EXISTS Deletions
     DeleteId    INTEGER PRIMARY KEY,
     MessageId   TEXT,
     ChannelId   TEXT,
-    Time        INTEGER
+    Time        INTEGER,
+    UNIQUE (MessageId, ChannelId)
 )
 ";
 
