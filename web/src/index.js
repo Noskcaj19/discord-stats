@@ -4,7 +4,6 @@ let user_msg_count = fetch("/api/msg_count").then(x => x.json());
 let channels = fetch("/api/channels").then(x => x.json());
 let guilds = fetch("/api/guilds").then(x => x.json());
 let msgs_per_day = fetch("/api/user_msg_count_per_day").then(x => x.json()).then(x => x.map(([date, ...x]) => [new Date(date), ...x]))
-let total_msgs_per_day = fetch("/api/total_msg_count_per_day").then(x => x.json()).then(x => x.map(([date, ...x]) => [new Date(date), ...x]))
 
 window.onload = function populate() {
 
@@ -38,8 +37,7 @@ window.onload = function populate() {
                 columns: [
                     x_axis, user_msgs_priv, user_msgs_pub
                 ],
-                type: 'area-spline',
-                groups: [[user_msgs_priv[0], user_msgs_pub[0],]],
+                type: 'area',
                 names: {
                     "private": "Private Messages",
                     "public": "Public Messages"
