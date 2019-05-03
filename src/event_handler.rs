@@ -105,6 +105,7 @@ impl EventHandler for Handler {
     fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
         self.store.set_current_user(ready.user.id);
+
         *self.user.lock().borrow_mut() = Some(ready.user.into());
         ctx.set_presence(None, serenity::model::user::OnlineStatus::Offline);
     }
@@ -130,6 +131,14 @@ impl OneshotHandler {
 
 impl EventHandler for OneshotHandler {
     fn ready(&self, context: Context, ready: Ready) {
+        {
+            let mut ctx_lock = context.cache.write();
+            for (&c_id, ch) in &ready.private_channels {
+                if let Some(private) = ch.clone().private() {
+                    ctx_lock.private_channels.insert(c_id, private);
+                }
+            }
+        }
         let _ = self.tx.lock().send(OneshotData { context, ready });
     }
 }

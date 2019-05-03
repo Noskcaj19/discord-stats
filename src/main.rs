@@ -4,12 +4,15 @@ use router::router;
 use serde_derive::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use serenity::prelude::*;
+use std::collections::HashSet;
 use std::fs::DirBuilder;
 use std::sync::Arc;
 use std::thread;
 
 mod store;
 use store::StatsStore;
+
+mod scan;
 
 mod api;
 mod event_handler;
@@ -129,6 +132,17 @@ fn main() {
                         .help("Channel name if guild is provided"),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("fetch-history")
+                .about("Add previously sent messages to the log")
+                .arg(
+                    Arg::with_name("max-count")
+                        .help("Maximum amount of messages to search")
+                        .long("max-count")
+                        .takes_value(true)
+                        .short("c"),
+                ),
+        )
         .get_matches();
 
     if let Some(store_token) = matches.subcommand_matches("store-token") {
@@ -182,6 +196,48 @@ fn main() {
             std::process::exit(0);
         }
     };
+
+    if let Some(fetch) = matches.subcommand_matches("fetch-history") {
+        let max_count: u64 = match fetch.value_of("max-count").unwrap_or("500").parse() {
+            Ok(c) => c,
+            Err(_) => {
+                eprintln!("max-count must be an integer");
+                return;
+            }
+        };
+        let (rx, handler) = event_handler::OneshotHandler::new();
+        let mut client = Client::new(&token, handler).expect("Unable to create client");
+        thread::spawn(move || {
+            client.start().expect("Unable starting discord client");
+        });
+        let data = rx.recv().expect("Unable to retrieve discord data");
+
+        let mut channels_to_scan = HashSet::new();
+        for (guild_id, channel_id) in config.tracked_channels() {
+            channels_to_scan.insert(store::Channel {
+                guild_id,
+                channel_id,
+            });
+        }
+        if let Ok(logged_channels) = stats.get_channels() {
+            channels_to_scan.extend(logged_channels)
+        }
+
+        println!("Scanning channels");
+        for channel in &channels_to_scan {
+            println!(
+                " {}",
+                channel
+                    .channel_id
+                    .name(&data.context)
+                    .unwrap_or_else(|| channel.channel_id.0.to_string())
+            )
+        }
+
+        scan::MessageScanner { data, store: stats }.scan_messages(&channels_to_scan, max_count);
+
+        return;
+    }
 
     // start web server
     let http_stats = stats.clone();
