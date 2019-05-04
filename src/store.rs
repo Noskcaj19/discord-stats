@@ -49,6 +49,12 @@ impl StatsStore {
     }
 
     pub fn insert_msg(&self, msg: &Message) {
+        // language=sql
+        let query = "
+        INSERT INTO main.Messages
+        (MessageId, Time, Content, ChannelId, GuildId, AuthorId)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+
         let data = &[
             &(msg.id.0.to_string()) as &ToSql,
             &msg.timestamp.timestamp(),
@@ -57,17 +63,23 @@ impl StatsStore {
             &msg.guild_id.map(|x| x.0.to_string()),
             &(msg.author.id.0.to_string()),
         ];
-        if let Err(_e) = self.conn.lock().execute(INSERT_MSG_SQL, data) {
+
+        if let Err(_e) = self.conn.lock().execute(query, data) {
             //            eprintln!("Failed to insert message: {}", e);
         }
     }
 
     pub fn insert_edit(&self, update: &MessageUpdateEvent) {
-        let q: rusqlite::Result<(i64, String, String)> = self.conn.lock().query_row(
-            GET_EDIT_ID_CONTENT_BY_ID,
-            &[update.id.0.to_string()],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        );
+        // language=sql
+        let query = "
+        SELECT EditId, Times, EditContents FROM Edits WHERE MessageId = ?";
+
+        let q: rusqlite::Result<(i64, String, String)> =
+            self.conn
+                .lock()
+                .query_row(query, &[update.id.0.to_string()], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                });
         match q {
             Ok((edit_id, ref time, ref content)) => {
                 let mut times: Vec<i64> = match serde_json::from_str(time) {
@@ -91,13 +103,18 @@ impl StatsStore {
                 if let Some(ref new_content) = update.content {
                     edits.push(new_content.clone())
                 }
+
                 // Update existing row
+                // language=sql
+                let query = "
+                UPDATE Edits SET Times = ?, EditContents = ? WHERE EditId = ?";
+
                 let data = &[
                     &serde_json::to_string(&times).unwrap() as &ToSql,
                     &serde_json::to_string(&edits).unwrap(),
                     &edit_id,
                 ];
-                if let Err(e) = self.conn.lock().execute(UPDATE_EDIT_SQL, data) {
+                if let Err(e) = self.conn.lock().execute(query, data) {
                     eprintln!("Failed to update edit: {}", e);
                 }
             }
@@ -108,13 +125,20 @@ impl StatsStore {
                 let content =
                     serde_json::to_string(&update.content.as_ref().map(|c| vec![c.clone()]))
                         .unwrap();
+
+                // language=sql
+                let query = "
+                INSERT INTO Edits (MessageId, ChannelId, Times, EditContents)
+                VALUES (?1, ?2, ?3, ?4)";
+
                 let data = &[
                     &update.id.0.to_string() as &ToSql,
                     &update.channel_id.0.to_string(),
                     &serialized_time,
                     &content,
                 ];
-                if let Err(e) = self.conn.lock().execute(INSERT_EDIT_SQL, data) {
+
+                if let Err(e) = self.conn.lock().execute(query, data) {
                     eprintln!("Failed to insert edit: {}", e);
                 }
             }
@@ -125,12 +149,18 @@ impl StatsStore {
     }
 
     pub fn insert_deletion(&self, channel_id: ChannelId, message_id: MessageId) {
+        // language=sql
+        let query = "
+        INSERT into Deletions (MessageId, ChannelId, Time)
+        VALUES (?1, ?2, ?3)";
+
         let data = &[
             &message_id.0.to_string() as &ToSql,
             &channel_id.0.to_string(),
             &chrono::offset::Utc::now().timestamp(),
         ];
-        if let Err(e) = self.conn.lock().execute(INSERT_DELETION_SQL, data) {
+
+        if let Err(e) = self.conn.lock().execute(query, data) {
             eprintln!("Failed to insert message: {}", e);
         }
     }
@@ -140,9 +170,17 @@ impl StatsStore {
         channel_id: ChannelId,
         message_id: MessageId,
     ) -> rusqlite::Result<StoreMessage> {
+        // language=sql
+        let query = "
+        SELECT MessageId, Time, Content, ChannelId, GuildId, AuthorId
+        FROM Messages
+        WHERE ChannelId = ?1
+        AND MessageId = ?2
+        ";
+
         let conn = self.conn.lock();
         conn.query_row(
-            GET_MSG_BY_CHANNEL_ID_AND_ID,
+            query,
             &[
                 &channel_id.0.to_string() as &ToSql,
                 &message_id.0.to_string(),
@@ -166,21 +204,22 @@ impl StatsStore {
                     .expect("invalid author_id")
                     .into();
                 Ok(StoreMessage {
-                    message_id: message_id,
+                    message_id,
                     time: row.get(1)?,
                     content: row.get(2)?,
-                    channel_id: channel_id,
+                    channel_id,
                     guild_id,
-                    author_id: author_id,
+                    author_id,
                 })
             },
         )
     }
 
     pub fn get_msg_count(&self) -> rusqlite::Result<i64> {
+        let query = "SELECT COUNT(*) FROM Messages";
         self.conn
             .lock()
-            .query_row(GET_MSG_COUNT_SQL, NO_PARAMS, |row| row.get(0))
+            .query_row(query, NO_PARAMS, |row| row.get(0))
     }
 
     pub fn get_user_msg_count(&self) -> rusqlite::Result<i64> {
@@ -211,6 +250,7 @@ impl StatsStore {
         WHERE AuthorId = ? AND msg_date > date_limit
         GROUP BY msg_date
         ORDER BY msg_date DESC";
+
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(query)?;
 
@@ -233,6 +273,7 @@ impl StatsStore {
         From Messages
         GROUP BY msg_date
         ORDER BY msg_date ASC";
+
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(query)?;
 
@@ -243,7 +284,7 @@ impl StatsStore {
     pub fn get_edit_count(&self) -> rusqlite::Result<i64> {
         //language=sql
         let query = "
-        SELECT IFNULL(SUM(json_array_length(EditContents)), 0) FROM Edits;";
+        SELECT IFNULL(SUM(json_array_length(EditContents)), 0) FROM Edits";
 
         self.conn
             .lock()
@@ -251,8 +292,11 @@ impl StatsStore {
     }
 
     pub fn get_channels(&self) -> rusqlite::Result<Vec<Channel>> {
+        // language=sql
+        let query = "SELECT DISTINCT ChannelId, GuildId FROM Messages";
+
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(GET_CHANNELS_SQL)?;
+        let mut stmt = conn.prepare(query)?;
 
         stmt.query_map(NO_PARAMS, |row| {
             Ok(Channel {
@@ -269,8 +313,11 @@ impl StatsStore {
     }
 
     pub fn get_guilds(&self) -> rusqlite::Result<Vec<GuildId>> {
+        // language=sql
+        let query = "SELECT DISTINCT GuildId FROM Messages";
+
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(GET_GUILDS_SQL)?;
+        let mut stmt = conn.prepare(query)?;
 
         stmt.query_map(NO_PARAMS, |row| row.get::<_, Option<String>>(0))
             .map(|rows| {
@@ -298,7 +345,7 @@ const CREATE_MSGS_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS Messages
     GuildId    TEXT,
     AuthorId   TEXT,
     UNIQUE (MessageId, ChannelId)
-);";
+)";
 
 // language=sql
 const CREATE_EDITS_TABLE_SQL: &str = "
@@ -322,48 +369,4 @@ CREATE TABLE IF NOT EXISTS Deletions
     Time        INTEGER,
     UNIQUE (MessageId, ChannelId)
 )
-";
-
-// language=sql
-const INSERT_DELETION_SQL: &str = "
-INSERT into Deletions (MessageId, ChannelId, Time)
-VALUES (?1, ?2, ?3)
-";
-
-// language=sql
-const INSERT_MSG_SQL: &str = r#"INSERT INTO main.Messages
-    (MessageId, Time, Content, ChannelId, GuildId, AuthorId)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6);"#;
-
-// language=sql
-const GET_MSG_BY_CHANNEL_ID_AND_ID: &str = "
-SELECT MessageId, Time, Content, ChannelId, GuildId, AuthorId
-FROM Messages
-WHERE ChannelId = ?1
-  AND MessageId = ?2
-";
-
-// language=sql
-const GET_MSG_COUNT_SQL: &str = r#"SELECT COUNT(*) FROM Messages"#;
-
-// language=sql
-const GET_CHANNELS_SQL: &str = "SELECT DISTINCT ChannelId, GuildId FROM Messages";
-
-// language=sql
-const GET_GUILDS_SQL: &str = "SELECT DISTINCT GuildId FROM Messages";
-
-// language=sql
-const INSERT_EDIT_SQL: &str = "
-INSERT INTO Edits (MessageId, ChannelId, Times, EditContents)
-VALUES (?1, ?2, ?3, ?4)";
-
-// Gets the edit id and content of an edit by its message id
-// language=sql
-const GET_EDIT_ID_CONTENT_BY_ID: &str = "
-SELECT EditId, Times, EditContents FROM Edits WHERE MessageId = ?
-";
-
-// language=sql
-const UPDATE_EDIT_SQL: &str = "
-UPDATE Edits SET Times = ?, EditContents = ? WHERE EditId = ?
 ";
