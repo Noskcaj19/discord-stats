@@ -3,11 +3,6 @@ jobs:
     pool:
       vmImage: ${{ parameters.vmImage }}
     steps:
-      - ${{ if eq(parameters.name, 'Linux') }}:
-          # Install openssl on Linux
-          - script: |
-              sudo apt-get install openssl
-            displayName: Install OpenSSL
       - ${{ if ne(parameters.name, 'Windows') }}:
           # Linux and macOS.
           - script: |
