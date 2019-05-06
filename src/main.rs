@@ -253,16 +253,7 @@ fn main() {
             channels_to_scan.extend(logged_channels)
         }
 
-        println!("Scanning channels");
-        for channel in &channels_to_scan {
-            println!(
-                " {}",
-                channel
-                    .channel_id
-                    .name(&data.context)
-                    .unwrap_or_else(|| channel.channel_id.0.to_string())
-            )
-        }
+        println!("Scanning:");
 
         scan::MessageScanner { data, store: stats }.scan_messages(&channels_to_scan, max_count);
 
