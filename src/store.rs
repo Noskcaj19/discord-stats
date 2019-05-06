@@ -54,8 +54,8 @@ impl StatsStore {
         // language=sql
         let query = "
         INSERT INTO main.Messages
-        (MessageId, Time, Content, ChannelId, GuildId, AuthorId)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+        (MessageId, Time, Content, ChannelId, GuildId, AuthorId, Metadata)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
 
         let data = &[
             &(msg.id.0.to_string()) as &ToSql,
@@ -64,6 +64,7 @@ impl StatsStore {
             &(msg.channel_id.0.to_string()),
             &msg.guild_id.map(|x| x.0.to_string()),
             &(msg.author.id.0.to_string()),
+            &None::<String>,
         ];
 
         Ok(self.conn.lock().execute(query, data)?)
@@ -112,15 +113,28 @@ impl StatsStore {
                     serde_json::to_string(&update.content.as_ref().map(|c| vec![c.clone()]))
                         .unwrap();
 
+                // Try and find the original content
+                let find_msg_query = "
+                SELECT Content FROM Messages WHERE MessageId == ?
+                ";
+                let orig_content: Option<String> = self
+                    .conn
+                    .lock()
+                    .query_row(find_msg_query, &[&update.id.0.to_string()], |row| {
+                        row.get(0)
+                    })
+                    .ok();
+
                 // language=sql
                 let query = "
-                INSERT INTO Edits (MessageId, ChannelId, Times, EditContents)
-                VALUES (?1, ?2, ?3, ?4)";
+                INSERT INTO Edits (MessageId, ChannelId, Times, OriginalContent, EditContents)
+                VALUES (?1, ?2, ?3, ?4, ?5)";
 
                 let data = &[
                     &update.id.0.to_string() as &ToSql,
                     &update.channel_id.0.to_string(),
                     &serialized_time,
+                    &orig_content,
                     &content,
                 ];
 
@@ -344,6 +358,7 @@ const CREATE_MSGS_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS Messages
     ChannelId  TEXT,
     GuildId    TEXT,
     AuthorId   TEXT,
+    Metadata   TEXT,
     UNIQUE (MessageId, ChannelId)
 )";
 
@@ -355,6 +370,7 @@ CREATE TABLE IF NOT EXISTS Edits
     MessageId       TEXT,
     ChannelId       TEXT,
     Times           TEXT,
+    OriginalContent TEXT,
     EditContents    TEXT,
     UNIQUE (MessageId, ChannelId)
 )";
