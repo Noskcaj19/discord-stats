@@ -53,7 +53,9 @@ impl Handler {
 impl EventHandler for Handler {
     fn message(&self, _ctx: Context, m: Message) {
         if self.should_handle(m.author.id, m.guild_id, m.channel_id) {
-            self.store.insert_msg(&m)
+            if let Err(e) = self.store.insert_msg(&m) {
+                eprintln!("Error occured inserting message: {:?}", e)
+            }
         }
     }
 
@@ -63,7 +65,9 @@ impl EventHandler for Handler {
             .get_message_with_channel_id(channel_id, message_id)
         {
             if self.should_handle(msg.author_id, msg.guild_id, msg.channel_id) {
-                self.store.insert_deletion(channel_id, message_id);
+                if let Err(e) = self.store.insert_deletion(channel_id, message_id) {
+                    eprintln!("Error occured inserting deletion: {:?}", e)
+                }
             }
         }
     }
@@ -80,7 +84,9 @@ impl EventHandler for Handler {
                 .get_message_with_channel_id(channel_id, message_id)
             {
                 if self.should_handle(msg.author_id, msg.guild_id, msg.channel_id) {
-                    self.store.insert_deletion(channel_id, message_id);
+                    if let Err(e) = self.store.insert_deletion(channel_id, message_id) {
+                        eprintln!("Error occured inserting deletion: {:?}", e)
+                    }
                 }
             }
         }
@@ -97,7 +103,9 @@ impl EventHandler for Handler {
             let msg = new.or(old);
             let guild = msg.as_ref().and_then(|msg| msg.guild_id);
             if self.should_handle(author.id, guild, update.channel_id) {
-                self.store.insert_edit(&update)
+                if let Err(e) = self.store.insert_edit(&update) {
+                    eprintln!("Error occured inserting deletion: {:?}", e)
+                }
             }
         }
     }

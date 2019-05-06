@@ -1,3 +1,4 @@
+use crate::error::StoreError;
 use crate::event_handler::OneshotData;
 use crate::store;
 use crate::store::StatsStore;
@@ -72,7 +73,11 @@ impl MessageScanner {
                     for msg in &mut msgs {
                         // why is this necessary?
                         msg.guild_id = guild_id;
-                        self.store.insert_msg(msg);
+                        match self.store.insert_msg(msg) {
+                            Ok(_rows) => {}
+                            Err(StoreError::Sqlite(rusqlite::Error::QueryReturnedNoRows)) => {}
+                            err @ _ => eprintln!("Unable to insert message: {:?}", err),
+                        };
                     }
                     last_msg = msgs.last().cloned();
                 }

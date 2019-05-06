@@ -1,4 +1,4 @@
-use rusqlite::{Connection as SqliteConnection, ToSql, NO_PARAMS};
+use rusqlite::{ToSql, NO_PARAMS};
 use serenity::model::event::MessageUpdateEvent;
 use serenity::model::id::{ChannelId, GuildId, MessageId, UserId};
 use serenity::{model::channel::Message, prelude::Mutex};
@@ -6,8 +6,10 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::error::StoreError;
+
 pub struct StatsStore {
-    conn: Arc<Mutex<SqliteConnection>>,
+    conn: Arc<Mutex<rusqlite::Connection>>,
     current_user: Mutex<RefCell<Option<UserId>>>,
 }
 
@@ -28,15 +30,15 @@ pub struct StoreMessage {
 }
 
 impl StatsStore {
-    pub fn new(path: &Path) -> Result<StatsStore, rusqlite::Error> {
+    pub fn new(path: &Path) -> Result<StatsStore, StoreError> {
         Ok(StatsStore {
             conn: Arc::new(Mutex::new(StatsStore::setup_connection(path)?)),
             current_user: Mutex::new(RefCell::new(None)),
         })
     }
 
-    fn setup_connection(path: &Path) -> Result<SqliteConnection, rusqlite::Error> {
-        let conn = SqliteConnection::open(path).expect("Unable to open database");
+    fn setup_connection(path: &Path) -> Result<rusqlite::Connection, StoreError> {
+        let conn = rusqlite::Connection::open(path)?;
 
         conn.execute(CREATE_MSGS_TABLE_SQL, NO_PARAMS)?;
         conn.execute(CREATE_EDITS_TABLE_SQL, NO_PARAMS)?;
@@ -48,7 +50,7 @@ impl StatsStore {
         *self.current_user.lock().get_mut() = Some(user_id)
     }
 
-    pub fn insert_msg(&self, msg: &Message) {
+    pub fn insert_msg(&self, msg: &Message) -> Result<usize, StoreError> {
         // language=sql
         let query = "
         INSERT INTO main.Messages
@@ -64,12 +66,10 @@ impl StatsStore {
             &(msg.author.id.0.to_string()),
         ];
 
-        if let Err(_e) = self.conn.lock().execute(query, data) {
-            //            eprintln!("Failed to insert message: {}", e);
-        }
+        Ok(self.conn.lock().execute(query, data)?)
     }
 
-    pub fn insert_edit(&self, update: &MessageUpdateEvent) {
+    pub fn insert_edit(&self, update: &MessageUpdateEvent) -> Result<(), StoreError> {
         // language=sql
         let query = "
         SELECT EditId, Times, EditContents FROM Edits WHERE MessageId = ?";
@@ -82,20 +82,8 @@ impl StatsStore {
                 });
         match q {
             Ok((edit_id, ref time, ref content)) => {
-                let mut times: Vec<i64> = match serde_json::from_str(time) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        println!("Error deserializing event times: {:#?}", e);
-                        return;
-                    }
-                };
-                let mut edits: Vec<String> = match serde_json::from_str(content) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        println!("Error deserializing event content: {:#?}", e);
-                        return;
-                    }
-                };
+                let mut times: Vec<i64> = serde_json::from_str(time)?;
+                let mut edits: Vec<String> = serde_json::from_str(content)?;
 
                 if let Some(ref timestamp) = update.timestamp {
                     times.push(timestamp.timestamp())
@@ -114,9 +102,7 @@ impl StatsStore {
                     &serde_json::to_string(&edits).unwrap(),
                     &edit_id,
                 ];
-                if let Err(e) = self.conn.lock().execute(query, data) {
-                    eprintln!("Failed to update edit: {}", e);
-                }
+                self.conn.lock().execute(query, data)?;
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 // Insert new edit row
@@ -138,17 +124,20 @@ impl StatsStore {
                     &content,
                 ];
 
-                if let Err(e) = self.conn.lock().execute(query, data) {
-                    eprintln!("Failed to insert edit: {}", e);
-                }
+                self.conn.lock().execute(query, data)?;
             }
-            Err(e) => {
-                println!("Error fetching edit for message {:#?}", e);
+            err @ Err(_) => {
+                err?;
             }
         };
+        Ok(())
     }
 
-    pub fn insert_deletion(&self, channel_id: ChannelId, message_id: MessageId) {
+    pub fn insert_deletion(
+        &self,
+        channel_id: ChannelId,
+        message_id: MessageId,
+    ) -> Result<(), StoreError> {
         // language=sql
         let query = "
         INSERT into Deletions (MessageId, ChannelId, Time)
@@ -160,16 +149,18 @@ impl StatsStore {
             &chrono::offset::Utc::now().timestamp(),
         ];
 
-        if let Err(e) = self.conn.lock().execute(query, data) {
-            eprintln!("Failed to insert message: {}", e);
-        }
+        self.conn
+            .lock()
+            .execute(query, data)
+            .map(|_| ())
+            .map_err(Into::into)
     }
 
     pub fn get_message_with_channel_id(
         &self,
         channel_id: ChannelId,
         message_id: MessageId,
-    ) -> rusqlite::Result<StoreMessage> {
+    ) -> Result<StoreMessage, StoreError> {
         // language=sql
         let query = "
         SELECT MessageId, Time, Content, ChannelId, GuildId, AuthorId
@@ -179,6 +170,7 @@ impl StatsStore {
         ";
 
         let conn = self.conn.lock();
+        // TODO: figure out error handling here
         conn.query_row(
             query,
             &[
@@ -189,19 +181,19 @@ impl StatsStore {
                 let message_id: MessageId = row
                     .get::<_, String>(0)?
                     .parse::<u64>()
-                    .expect("invalid message_id")
+                    .expect("invalid message_id in db")
                     .into();
                 let channel_id: ChannelId = row
                     .get::<_, String>(3)?
                     .parse()
-                    .expect("invalid channel_id");
+                    .expect("invalid channel_id in db");
                 let guild_id: Option<GuildId> = row
                     .get::<_, Option<String>>(4)?
-                    .map(|g| GuildId(g.parse().expect("invalid guild_id")));
+                    .map(|g| GuildId(g.parse().expect("invalid guild_id in db")));
                 let author_id: UserId = row
                     .get::<_, String>(5)?
                     .parse::<u64>()
-                    .expect("invalid author_id")
+                    .expect("invalid author_id in db")
                     .into();
                 Ok(StoreMessage {
                     message_id,
@@ -213,16 +205,18 @@ impl StatsStore {
                 })
             },
         )
+        .map_err(Into::into)
     }
 
-    pub fn get_msg_count(&self) -> rusqlite::Result<i64> {
+    pub fn get_msg_count(&self) -> Result<i64, StoreError> {
         let query = "SELECT COUNT(*) FROM Messages";
-        self.conn
+        Ok(self
+            .conn
             .lock()
-            .query_row(query, NO_PARAMS, |row| row.get(0))
+            .query_row(query, NO_PARAMS, |row| row.get(0))?)
     }
 
-    pub fn get_user_msg_count(&self) -> rusqlite::Result<i64> {
+    pub fn get_user_msg_count(&self) -> Result<i64, StoreError> {
         // language=sql
         let query = "SELECT COUNT(*)
         FROM Messages
@@ -236,10 +230,10 @@ impl StatsStore {
             .0
             .to_string();
 
-        self.conn.lock().query_row(query, &[id], |row| row.get(0))
+        Ok(self.conn.lock().query_row(query, &[id], |row| row.get(0))?)
     }
 
-    pub fn get_user_msgs_per_day(&self) -> rusqlite::Result<Vec<(String, i64, i64)>> {
+    pub fn get_user_msgs_per_day(&self) -> Result<Vec<(String, i64, i64)>, StoreError> {
         // language=sql
         let query = "
         SELECT DATE('now', '-7 days')   date_limit,
@@ -264,9 +258,10 @@ impl StatsStore {
 
         stmt.query_map(&[id], |row| Ok((row.get(1)?, row.get(2)?, row.get(3)?)))
             .map(|rows| rows.flatten().collect::<Vec<_>>())
+            .map_err(Into::into)
     }
 
-    pub fn get_total_msgs_per_day(&self) -> rusqlite::Result<Vec<(String, i64, i64)>> {
+    pub fn get_total_msgs_per_day(&self) -> Result<Vec<(String, i64, i64)>, StoreError> {
         // language=sql
         let query = "
         SELECT DATE(Time, 'unixepoch') msg_date, SUM(GuildId IS NOT NULl) msg_count, SUM(GuildId ISNULL)
@@ -279,9 +274,10 @@ impl StatsStore {
 
         stmt.query_map(NO_PARAMS, |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .map(|rows| rows.flatten().collect::<Vec<_>>())
+            .map_err(Into::into)
     }
 
-    pub fn get_edit_count(&self) -> rusqlite::Result<i64> {
+    pub fn get_edit_count(&self) -> Result<i64, StoreError> {
         //language=sql
         let query = "
         SELECT IFNULL(SUM(json_array_length(EditContents)), 0) FROM Edits";
@@ -289,30 +285,33 @@ impl StatsStore {
         self.conn
             .lock()
             .query_row(query, NO_PARAMS, |row| row.get(0))
+            .map_err(Into::into)
     }
 
-    pub fn get_channels(&self) -> rusqlite::Result<Vec<Channel>> {
+    pub fn get_channels(&self) -> Result<Vec<Channel>, StoreError> {
         // language=sql
         let query = "SELECT DISTINCT ChannelId, GuildId FROM Messages";
 
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(query)?;
 
+        // TODO: figure out error handling here
         stmt.query_map(NO_PARAMS, |row| {
             Ok(Channel {
                 channel_id: row
                     .get::<_, String>(0)?
                     .parse()
-                    .expect("invalid channel_id"),
+                    .expect("invalid channel_id in db"),
                 guild_id: row
                     .get::<_, Option<String>>(1)?
-                    .map(|g| GuildId(g.parse().expect("invalid guild_id"))),
+                    .map(|g| GuildId(g.parse().expect("invalid guild_id in db"))),
             })
         })
         .map(|rows| rows.flatten().collect::<Vec<_>>())
+        .map_err(Into::into)
     }
 
-    pub fn get_guilds(&self) -> rusqlite::Result<Vec<GuildId>> {
+    pub fn get_guilds(&self) -> Result<Vec<GuildId>, StoreError> {
         // language=sql
         let query = "SELECT DISTINCT GuildId FROM Messages";
 
@@ -325,12 +324,13 @@ impl StatsStore {
 
                 for r in rows {
                     if let Ok(i) = r {
-                        out.push(i.map(|i| i.parse().expect("invalid guild_id")));
+                        out.push(i.map(|i| i.parse().expect("invalid guild_id in db")));
                     }
                 }
 
                 out.iter().flatten().map(|&g| g.into()).collect()
             })
+            .map_err(Into::into)
     }
 }
 

@@ -47,7 +47,7 @@ pub fn edit_count(req: &mut Request) -> IronResult<Response> {
     Ok(match stats.get_edit_count() {
         Ok(count) => Response::with((status::Ok, count.to_string())),
         Err(e) => {
-            eprintln!("Error getting message count: {}", e);
+            eprintln!("Error getting message count: {:?}", e);
             Response::with((status::NoContent, "0".to_owned()))
         }
     })
