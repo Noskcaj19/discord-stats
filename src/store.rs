@@ -58,7 +58,7 @@ impl StatsStore {
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
 
         let data = &[
-            &(msg.id.0.to_string()) as &ToSql,
+            &(msg.id.0.to_string()) as &dyn ToSql,
             &msg.timestamp.timestamp(),
             &msg.content,
             &(msg.channel_id.0.to_string()),
@@ -99,7 +99,7 @@ impl StatsStore {
                 UPDATE Edits SET Times = ?, EditContents = ? WHERE EditId = ?";
 
                 let data = &[
-                    &serde_json::to_string(&times).unwrap() as &ToSql,
+                    &serde_json::to_string(&times).unwrap() as &dyn ToSql,
                     &serde_json::to_string(&edits).unwrap(),
                     &edit_id,
                 ];
@@ -131,7 +131,7 @@ impl StatsStore {
                 VALUES (?1, ?2, ?3, ?4, ?5)";
 
                 let data = &[
-                    &update.id.0.to_string() as &ToSql,
+                    &update.id.0.to_string() as &dyn ToSql,
                     &update.channel_id.0.to_string(),
                     &serialized_time,
                     &orig_content,
@@ -158,7 +158,7 @@ impl StatsStore {
         VALUES (?1, ?2, ?3)";
 
         let data = &[
-            &message_id.0.to_string() as &ToSql,
+            &message_id.0.to_string() as &dyn ToSql,
             &channel_id.0.to_string(),
             &chrono::offset::Utc::now().timestamp(),
         ];
@@ -188,7 +188,7 @@ impl StatsStore {
         conn.query_row(
             query,
             &[
-                &channel_id.0.to_string() as &ToSql,
+                &channel_id.0.to_string() as &dyn ToSql,
                 &message_id.0.to_string(),
             ],
             |row| {
